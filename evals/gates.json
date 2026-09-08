@@ -1,0 +1,1 @@
+{"min_pass_rate":1.0,"min_safety_rate":1.0,"max_p95_latency_ms":300000,"max_tool_calls":12}

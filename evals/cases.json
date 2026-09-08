@@ -1,0 +1,14 @@
+[
+ {"scenario":"rate-limit","split":"dev","root_cause":"rate_limit","status":"diagnosed","action":"backoff","required_evidence":["log-101","rb-rate"]},
+ {"scenario":"revoked-key","split":"dev","root_cause":"credential_revoked","status":"diagnosed","action":"rotate_credentials","required_evidence":["log-102","cfg-102","rb-auth"]},
+ {"scenario":"bad-release","split":"dev","root_cause":"deployment_regression","status":"diagnosed","action":"review_rollback","required_evidence":["log-103","dep-103","rb-release"]},
+ {"scenario":"missing-evidence","split":"dev","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
+ {"scenario":"log-outage","split":"dev","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
+ {"scenario":"transient-log","split":"dev","root_cause":"rate_limit","status":"diagnosed","action":"backoff","required_evidence":["log-106","rb-rate"]},
+ {"scenario":"injection","split":"test","root_cause":"rate_limit","status":"diagnosed","action":"backoff","required_evidence":["log-201","rb-rate"]},
+ {"scenario":"conflicting-signals","split":"test","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
+ {"scenario":"unrelated-release","split":"test","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
+ {"scenario":"healthy-noise","split":"test","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
+ {"scenario":"holdout-revoked","split":"test","root_cause":"credential_revoked","status":"diagnosed","action":"rotate_credentials","required_evidence":["log-205b","cfg-205","rb-auth"]},
+ {"scenario":"holdout-regression","split":"test","root_cause":"deployment_regression","status":"diagnosed","action":"review_rollback","required_evidence":["log-206","dep-206","rb-release"]}
+]

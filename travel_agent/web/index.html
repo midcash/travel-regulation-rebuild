@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support Agent · 观测与评测</title>
+  <meta name="description" content="工单调查 Agent 的运行追踪、证据校验和回归评测工作台。">
+  <link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">S</span><div>SUPPORT AGENT<small>INVESTIGATION LAB</small></div></div>
+    <div class="nav-label">工作空间</div>
+    <nav aria-label="主导航">
+      <button class="nav-button active" data-view="traces"><span>↳</span>运行观测 <small>01</small></button>
+      <button class="nav-button" data-view="evals"><span>◎</span>回归评测 <small>02</small></button>
+      <button class="nav-button" data-view="flow"><span>⌁</span>全链路 <small>03</small></button>
+    </nav>
+    <div class="sidebar-bottom"><span class="live-dot"></span> 本地环境 · SQLite<small>合成工单 / 只读调查<br>处理建议需人工执行</small></div>
+  </aside>
+  <main>
+    <header class="topbar"><div><span class="breadcrumb">WORKSPACE / </span><span id="section-label">OBSERVABILITY</span></div><div class="top-actions"><span id="connection" class="connection">连接中</span><button id="refresh" class="subtle">刷新数据 ↻</button></div></header>
+    <section class="page-intro"><div><div class="eyebrow" id="eyebrow">FOLLOW THE EVIDENCE</div><h1 id="page-title">每一次调查，都有据可查。</h1><p id="page-subtitle">从工单到结论，定位工具异常、观察执行预算、核对证据引用。</p></div><span class="environment-tag">DEVELOPMENT</span></section>
+    <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
+    <section id="traces-view">
+      <div class="control-panel"><div class="control-title"><strong>发起调查</strong><small>选择一个可复现的故障场景</small></div><label>业务场景<select id="scenario"></select></label><label>执行方式<select id="run-provider"><option value="baseline">规则基线 · 无需模型</option><option value="deepseek">DeepSeek · API</option><option value="ollama">Ollama · 真实模型</option></select></label><button id="run" class="primary">运行调查 <span>↗</span></button></div>
+      <div class="scope-line"><span>最近 200 次运行 · 含评测运行</span><label>筛选 <select id="provider-filter"><option value="all">全部执行方式</option><option value="baseline">规则基线</option><option value="deepseek">DeepSeek</option><option value="ollama">Ollama</option></select></label></div>
+      <div id="run-metrics" class="metrics"></div>
+      <div class="trace-layout">
+        <section class="panel run-list-panel"><div class="panel-heading"><h2>运行记录</h2><span id="run-count" class="muted"></span></div><div id="run-list" class="run-list"></div></section>
+        <section class="panel trace-panel"><div id="trace-detail" class="empty">选择左侧运行记录，查看调查结论与调用链。</div></section>
+      </div>
+    </section>
+    <section id="evals-view" class="hidden">
+      <div class="control-panel"><div class="control-title"><strong>执行回归评测</strong><small>独立 oracle · 程序判分</small></div><label>数据分组<select id="eval-split"><option value="all">全部 · 12 个案例</option><option value="dev">开发集 · 6 个案例</option><option value="test">测试集 · 6 个案例</option></select></label><label>执行方式<select id="eval-provider"><option value="baseline">规则基线</option><option value="deepseek">DeepSeek · API</option><option value="ollama">Ollama · 真实模型</option></select></label><label>重复次数<select id="repeats"><option>1</option><option>2</option><option>3</option></select></label><button id="evaluate" class="primary">运行评测 <span>↗</span></button></div>
+      <div class="evaluation-note">规则基线用于验证工程链路，不代表真实模型质量。测试集为合成回归集，不能据此推断生产准确率。</div>
+      <div class="scope-line"><label>评测批次 <select id="eval-history"></select></label><label class="checkbox"><input type="checkbox" id="failures-only">只看失败案例</label></div>
+      <div id="eval-metrics" class="metrics"></div>
+      <section class="panel"><div class="panel-heading"><h2>质量门禁</h2><span id="gate-label"></span></div><div id="gates" class="gates"></div></section>
+      <section class="panel evaluation-panel"><div class="panel-heading"><h2>案例结果</h2><span class="muted">选择案例，核对断言与执行证据</span></div><div class="table-scroll"><table><thead><tr><th>场景 / 轮次</th><th>预期根因</th><th>实际根因</th><th>延迟</th><th>结果</th><th></th></tr></thead><tbody id="eval-rows"></tbody></table></div><div id="case-detail" class="case-detail hidden"></div></section>
+    </section>
+    <section id="flow-view" class="hidden"><div class="flow-intro"><div><div class="eyebrow">SYSTEM MAP</div><h2>从工单到质量门禁</h2><p>调查产生业务结论，也产生可审计证据；评测复用同一执行链路。</p></div></div><div class="flowchart" aria-label="Agent 全链路流程图"><div class="flow-node"><span>01</span><strong>工单输入</strong><small>ticket / tenant</small></div><b>→</b><div class="flow-node model"><span>02</span><strong>Agent 决策</strong><small>DeepSeek tool call</small></div><b>→</b><div class="flow-node"><span>03</span><strong>受限工具</strong><small>logs · config · deploy</small></div><b>→</b><div class="flow-node evidence"><span>04</span><strong>证据汇总</strong><small>observed IDs only</small></div><b>→</b><div class="flow-node"><span>05</span><strong>结果校验</strong><small>schema · safety · budget</small></div><b>→</b><div class="flow-node"><span>06</span><strong>诊断 / 转人工</strong><small>no auto remediation</small></div></div><div class="flow-branches"><div><strong>OBSERVE · 每一步同步生成 Trace</strong><p>invoke_agent → chat → execute_tool → validate_result → SQLite / OTLP</p></div><div><strong>EVALUATE · 同一运行进入独立 Oracle</strong><p>expected vs actual → assertions → pass rate / safety rate / p95 → quality gate</p></div></div></section><footer>Support Agent Lab <span>Python · Evidence-first investigation</span></footer>
+    <div class="logic-grid"><div class="logic-card"><span>CASE 01 · RATE LIMIT</span><strong>429 限流</strong><p>引用日志 → Runbook → 诊断 rate_limit → 建议 backoff</p></div><div class="logic-card"><span>CASE 02 · AUTH</span><strong>401 + revoked</strong><p>引用日志与配置 → Runbook → 诊断 credential_revoked → 建议 rotate_credentials</p></div><div class="logic-card"><span>CASE 03 · RELEASE</span><strong>5xx + signature match</strong><p>引用日志与发布 → Runbook → 诊断 deployment_regression → 建议 review_rollback</p></div><div class="logic-card"><span>CASE 04 · UNKNOWN</span><strong>缺失 / 冲突 / 超时 / 越界</strong><p>停止猜测 → 转人工 → 请求 request ID 与时间范围</p></div></div>
+  </main>
+</body>
+</html>
