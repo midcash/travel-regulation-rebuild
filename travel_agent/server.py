@@ -10,8 +10,8 @@ import threading
 from urllib.parse import urlsplit
 import uuid
 
-from .agent import investigate
-from .domain import PACKAGE, scenarios, scenario_by_id
+from .agent import plan_trip
+from .domain import PACKAGE, scenarios, scenario_by_id, custom_scenario
 from .evaluation import evaluate
 from .providers import make_provider
 
@@ -22,17 +22,17 @@ class Application:
         self.jobs = {}
         self.lock = threading.Lock()
         self.busy = False
-        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="investigation")
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="travel-planning")
 
     def submit(self, body, kind):
-        selected = body.get("provider", "baseline")
+        selected = body.get("provider", self.provider.name)
         if selected not in {"baseline", "ollama", "deepseek"}:
             raise ValueError("Invalid provider")
         if selected == "ollama" and self.provider.name != "ollama":
             raise ValueError("Start server with --provider ollama to enable a real model")
         provider = self.provider if selected == self.provider.name else make_provider(selected)
         if kind == "run":
-            scenario = scenario_by_id(body.get("scenario", "rate-limit"))
+            scenario = custom_scenario(body["request"]) if "request" in body else scenario_by_id(body.get("scenario", "hangzhou-shanghai"))
         else:
             split, repeats = body.get("split", "all"), body.get("repeats", 1)
             if split not in {"all", "dev", "test"} or type(repeats) is not int or not 1 <= repeats <= 3:
@@ -48,7 +48,7 @@ class Application:
 
         def work():
             try:
-                result = investigate(scenario, provider, self.store, otel=self.otel) if kind == "run" else evaluate(
+                result = plan_trip(scenario, provider, self.store, otel=self.otel) if kind == "run" else evaluate(
                     self.store, provider, split, repeats, otel=self.otel)
                 update = {"status": "completed", "result_id": result["trace_id"] if kind == "run" else result["id"]}
             except Exception as exc:
@@ -60,7 +60,7 @@ class Application:
         return {"id": identifier, "kind": kind, "status": "running"}
 
 
-def make_server(store, provider, port=8765, otel=None):
+def make_server(store, provider, port=8766, otel=None):
     app = Application(store, provider, otel)
 
     class Handler(BaseHTTPRequestHandler):
@@ -106,7 +106,7 @@ def make_server(store, provider, port=8765, otel=None):
                 return self.send(200, {"ollama_enabled": provider.name == "ollama", "model": provider.model,
                     "deepseek_enabled": bool(os.getenv("DEEPSEEK_API_KEY")),
                     "deepseek_model": provider.model if provider.name == "deepseek" else os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-                    "scenarios": [{"id": x["id"], "ticket": x["ticket"]["text"]} for x in scenarios()]})
+                    "scenarios": [{"id": x["id"], "label": x["label"], "request": x["request"]} for x in scenarios()]})
             if path == "/api/runs":
                 return self.send(200, store.list_runs())
             if path.startswith("/api/runs/"):
@@ -124,7 +124,7 @@ def make_server(store, provider, port=8765, otel=None):
             if not self.host_allowed():
                 return self.send(403, {"error": "Invalid host"})
             expected_origin = "http://" + self.headers["Host"]
-            if self.headers.get("Origin", expected_origin) != expected_origin or self.headers.get("X-Support-Client") != "dashboard":
+            if self.headers.get("Origin", expected_origin) != expected_origin or self.headers.get("X-Travel-Client") != "dashboard":
                 return self.send(403, {"error": "Same-origin client header required"})
             if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 return self.send(415, {"error": "JSON required"})
@@ -147,9 +147,9 @@ def make_server(store, provider, port=8765, otel=None):
     return server
 
 
-def serve(store, provider, port=8765, otel=None):
+def serve(store, provider, port=8766, otel=None):
     server = make_server(store, provider, port, otel)
-    print(f"Support Agent Lab: http://127.0.0.1:{server.server_address[1]}", flush=True)
+    print(f"Travel Agent Lab: http://127.0.0.1:{server.server_address[1]}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

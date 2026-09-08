@@ -31,8 +31,14 @@ class Store:
                     id TEXT PRIMARY KEY, started_at TEXT NOT NULL, payload TEXT NOT NULL);
             """)
 
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(str(self.path), timeout=10)
+        db = sqlite3.connect(str(self.path), timeout=10)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def save_run(self, item):
         with self.connect() as db:
@@ -99,13 +105,15 @@ class Tracer:
                 except Exception as exc:
                     record["status"] = "error"
                     record["attributes"]["error.type"] = type(exc).__name__
+                    if getattr(exc, "reason", None) in {"steps", "tool_calls", "tokens", "deadline"}:
+                        record["attributes"]["budget.reason"] = exc.reason
                     if type(getattr(exc, "http_status", None)) is int:
                         record["attributes"]["http.status_code"] = exc.http_status
                     raise
                 finally:
                     if external:
-                        external.set_attribute("support.local_trace_id", self.trace_id)
-                        external.set_attribute("support.local_span_id", record["span_id"])
+                        external.set_attribute("travel.local_trace_id", self.trace_id)
+                        external.set_attribute("travel.local_span_id", record["span_id"])
                         for key, value in record["attributes"].items():
                             if isinstance(value, (str, bool, int, float)):
                                 external.set_attribute(key, value)
@@ -126,7 +134,7 @@ def make_otel(endpoint):
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-    provider = TracerProvider(resource=Resource.create({"service.name": "support-agent-lab"}))
+    provider = TracerProvider(resource=Resource.create({"service.name": "travel-agent-lab"}))
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, timeout=5)))
     # 这里的 BatchSpanProcessor 负责收集已结束的 span、批量处理；OTLPSpanExporter 负责通过 HTTP 将数据发送到指定的 endpoint。所以你没有在 span() 中看到显式的发送或返回代码——这些由 SDK 接手。
-    return provider.get_tracer("support-agent", "0.1.0"), provider
+    return provider.get_tracer("travel-agent", "0.1.0"), provider

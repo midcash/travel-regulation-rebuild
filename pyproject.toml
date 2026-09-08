@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "support-agent-lab"
+name = "travel-agent-lab"
 version = "0.1.0"
-description = "Evidence-grounded support investigation agent with traces and regression gates"
+description = "Travel planning agent adapted from observation, with traces and regression gates"
 requires-python = ">=3.11"
 dependencies = []
 
@@ -13,10 +13,10 @@ dependencies = []
 otel = ["opentelemetry-sdk>=1.27,<2", "opentelemetry-exporter-otlp-proto-http>=1.27,<2"]
 
 [project.scripts]
-support-agent = "support_agent.cli:main"
+travel-agent = "travel_agent.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["support_agent*"]
+include = ["travel_agent*"]
 
 [tool.setuptools.package-data]
-support_agent = ["data/*.json", "prompts/*.txt", "web/*"]
+travel_agent = ["data/*.json", "prompts/*.txt", "web/*"]

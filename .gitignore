@@ -6,3 +6,5 @@ artifacts/
 .env
 build/
 dist/
+.idea/
+.tmp/

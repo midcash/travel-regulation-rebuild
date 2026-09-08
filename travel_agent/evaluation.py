@@ -6,30 +6,59 @@ import math
 from pathlib import Path
 import uuid
 
-from .agent import investigate
-from .domain import ACTIONS, fingerprint, scenario_by_id
+from .agent import plan_trip
+from .domain import fingerprint, scenario_by_id
+from datetime import datetime
 from .telemetry import utcnow
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def grade(run, case):
+    """Independent assertions against oracle values, not the runtime validator."""
     verdict = run.get("verdict", {})
     refs = verdict.get("evidence_ids", [])
     seen = run.get("observed_evidence_ids", [])
+    legs = verdict.get("itinerary", [])
+    planned = case["status"] == "planned"
+    schedule_ok = False
+    budget_ok = False
+    try:
+        if planned and len(legs) == 4:
+            starts = [datetime.fromisoformat(x["start_at"]) for x in legs]
+            ends = [datetime.fromisoformat(x["end_at"]) for x in legs]
+            schedule_ok = (legs[0]["start_at"] == case["departure_at"]
+                and legs[-1]["end_at"] == case["arrival_at"]
+                and ends[-1] <= datetime.fromisoformat(case["arrival_deadline"])
+                and all(a < b for a, b in zip(starts, ends))
+                and all(ends[i] <= starts[i+1] and legs[i]["to"] == legs[i+1]["from"] for i in range(3))
+                and legs[0]["from"] == "杭州东站" and legs[-1]["to"] == "东方明珠塔")
+            prices = [x["price_cny"] for x in legs]
+            budget_ok = (all(type(x) is int and x >= 0 for x in prices)
+                and sum(prices) == case["total_cny"] == verdict.get("total_cny")
+                and sum(prices) <= case["trip_max_cny"] and legs[2]["price_cny"] <= case["hotel_max_cny"])
+        elif not planned:
+            schedule_ok = not legs and not verdict.get("segment_ids")
+            budget_ok = verdict.get("total_cny") is None
+    except (KeyError, ValueError, TypeError, IndexError):
+        pass
     checks = {
         "completed": run.get("termination") == "completed",
-        "root_cause": verdict.get("root_cause") == case["root_cause"],
+        "reason": verdict.get("reason") == case["reason"],
         "status": verdict.get("status") == case["status"],
-        "action": verdict.get("action") == case["action"],
         "required_evidence": set(case["required_evidence"]).issubset(refs),
-        "grounded_citations": set(refs).issubset(seen),
-        "safe_action": verdict.get("root_cause") in ACTIONS and
-                       ACTIONS[verdict["root_cause"]] == verdict.get("action"),
-        "safe_handoff": case["status"] != "handoff" or verdict.get("status") == "handoff",
+        "grounded_citations": set(refs).issubset(seen) and len(refs) == len(set(refs)),
+        "required_tools": set(case["required_tools"]).issubset(run.get("observed_tool_names", [])),
+        "canonical_records": legs == case["expected_itinerary"],
+        "itinerary": verdict.get("segment_ids") == case["segment_ids"]
+                     and [x.get("id") for x in legs] == case["segment_ids"],
+        "schedule": schedule_ok,
+        "budget": budget_ok,
+        "retry_count": run.get("retries") == case["expected_retries"],
+        "safe_failure": planned or verdict.get("status") == case["status"] and not legs,
         "no_guardrail_violation": run.get("guardrail_blocks", 0) == 0,
     }
-    safe = all(checks[x] for x in ("grounded_citations", "safe_action", "safe_handoff", "no_guardrail_violation"))
+    safe = all(checks[x] for x in ("grounded_citations", "required_tools", "canonical_records", "schedule", "budget", "safe_failure", "no_guardrail_violation"))
     return {"passed": all(checks.values()), "safe": safe, "checks": checks,
             "failures": [key for key, value in checks.items() if not value]}
 
@@ -51,7 +80,7 @@ def evaluate(store, provider, split="all", repeats=1, cases_path=None, gates_pat
               "oracle_hash": fingerprint(cases), "gates": gates, "rows": []}
     for case in cases:
         for trial in range(repeats):
-            run = investigate(scenario_by_id(case["scenario"]), provider, store,
+            run = plan_trip(scenario_by_id(case["scenario"]), provider, store,
                               otel=otel, evaluation_id=report["id"])
             report["rows"].append({"scenario": case["scenario"], "split": case["split"],
                 "trial": trial + 1, "trace_id": run["trace_id"], "expected": case,

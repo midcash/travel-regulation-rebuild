@@ -1,1 +1,67 @@
-# travel-regulation-rebuild
+# 差旅规划 Agent · 第一阶段
+
+以 `F:\Commercial project\observation` 为基底：保留 agent loop、SQLite / 可选 OTLP、评测执行与质量门禁、运行观测 / 回归评测 / 全链路三个页面，只替换差旅业务。
+
+LLM 默认使用原项目相同的真实 DeepSeek 配置；公司政策、城际交通、酒店、市内交通由四个本地工具返回固定演示数据。没有真实业务 API、预订或付款。规则基线只是显式选择的离线对照，不会在模型失败时自动接管。
+
+## 本地启动与 PyCharm
+
+当前工作区已建立 `.venv`，已安装项目与可选 OTLP 依赖。直接运行：
+
+```powershell
+.\.venv\Scripts\python.exe main.py
+```
+
+打开 <http://127.0.0.1:8766>。使用 8766，避免占用 observation 常用的 8765。
+
+PyCharm 解释器选择当前项目的 `.venv\Scripts\python.exe`，脚本选择 `main.py`，不填参数即可启动真实 DeepSeek 工作台。工作目录由入口定位到项目根目录；可在 `travel_agent/agent.py` 的 `provider.chat`、`toolbox.execute`、`validate_verdict` 附近打断点。调试模型决策时暂停太久可能触发原有 180 秒运行预算。
+
+本地 `.env` 已沿用 observation 配置，密钥不会被 Git 跟踪或写入 Trace。新建环境时：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+# 可选：需要 OTLP 时安装；SQLite 和三个页面不依赖此扩展
+.\.venv\Scripts\python.exe -m pip install -e ".[otel]"
+Copy-Item .env.example .env
+# 在编辑器中填写 .env 的 DEEPSEEK_API_KEY，再启动
+```
+
+`start-local.ps1` 也可启动；离线查看使用 `./start-local.ps1 -Provider baseline`。
+
+## 演示业务
+
+默认案例：2026-09-12 08:00 在上海东方明珠塔开会，杭州出发。
+
+- 前一天 19:00–20:30：杭州东站 → 上海虹桥站，模拟动车二等座，73 元。
+- 20:50–21:20：上海虹桥站 → 桔子水晶酒店，模拟出租车，120 元。
+- 21:20 至次日 07:20：模拟住宿一晚，400 元。
+- 次日 07:20–07:50：酒店 → 东方明珠塔，模拟出租车，35 元。
+
+模拟总价 628 元。演示政策为前一天 18:00 起出发、酒店每晚 ≤500 元、总价 ≤1000 元、至少提前 10 分钟到达。不计算出发地到出发车站及站内时间。酒店和交通时间均是测试数据，不代表真实报价或路线。
+
+页面选择“自定义会议”可填写城市、地点和日期时间（北京时间），工具按会议日期生成前晚和次晨数据。首版数据只覆盖“杭州 / 上海 / 东方明珠塔”，其他输入明确返回无可行方案。暂不做自然语言日期解析、多方案搜索或实际路线优化。
+
+## 开发与验证
+
+```powershell
+# 无网络测试，包括本地 HTTP 与已安装时的 OTLP 导出测试
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+# 六个固定场景的离线回归
+.\.venv\Scripts\python.exe -m travel_agent eval --provider baseline
+# 真实模型回归（调用 API）
+.\.venv\Scripts\python.exe -m travel_agent eval --provider deepseek --repeats 2
+# 单次运行 / 查看 Trace
+.\.venv\Scripts\python.exe -m travel_agent run --provider deepseek --scenario hangzhou-shanghai
+.\.venv\Scripts\python.exe -m travel_agent trace TRACE_ID
+```
+
+六个案例覆盖成功、重试恢复、酒店超预算、到达过晚、无酒店、连续超时。`evals/cases.json` 中的 oracle 不进入模型或工具上下文，程序分别检查结果、证据、行程、时间、费用与重试。门禁沿用原项目：任务通过率和安全断言通过率均为 100%、P95 ≤300 秒、最多 12 次工具调用。agent loop 仍保留 10 轮、12 次工具调用、180 秒总时限、45 秒单次模型超时、24000 Token 的默认限制。
+
+观测数据位于 `artifacts/observability.sqlite3`，CLI 评测报告默认为 `artifacts/latest-evaluation.json`；页面评测保存到数据库。`artifacts`、`.env`、`.venv` 和 `.idea` 均不提交。失败历史保留用于比较，不因修正而清空。费用只有在 `.env` 配置了三个计价字段时才显示，未配置时显示“未计价”。
+
+阅读顺序建议：`agent.py` → `tools.py` / `domain.py` / `prompts/planner.txt` → `telemetry.py` → `evaluation.py` → `server.py` / `web`。详见 [验收约定](docs/acceptance.md) 和 [验证记录](docs/verification.md)。
+
+## Git 回退
+
+开发分支：`codex/travel-phase1`。`55b8347` 是 observation 源码基底快照，用来比较保留与替换了哪些内容；该快照尚未完成差旅包配置，不作为可运行差旅版本。第一阶段完成提交是后续业务优化的可运行回退点。使用 `git log --oneline` 查看提交；回退业务修改优先通过 `git revert` 生成反向提交，保留历史。

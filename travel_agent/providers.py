@@ -7,7 +7,8 @@ import os
 import urllib.request
 import urllib.error
 from urllib.parse import urlsplit
-from .domain import ACTIONS, handoff
+from datetime import datetime, timedelta
+from .tools import TOOL_NAMES
 
 
 def tool_call(name, args=None):
@@ -16,47 +17,37 @@ def tool_call(name, args=None):
 
 
 class Baseline:
-    """Deterministic policy for plumbing and comparison; explicitly NOT an LLM agent."""
+    """Offline deterministic comparison only; never a fallback for real DeepSeek."""
     name = "baseline"
     model = "rules-v1"
 
     def chat(self, messages, schemas, timeout):
-        observations = {}
-        for message in messages:
-            if message["role"] == "tool":
-                observations[message["tool_name"]] = json.loads(message["content"])
-        if "query_logs" not in observations:
-            reply = tool_call("query_logs")
+        observations = {m["tool_name"]: json.loads(m["content"])
+                        for m in messages if m["role"] == "tool"}
+        pending = next((name for name in TOOL_NAMES if name not in observations), None)
+        if pending:
+            reply = tool_call(pending)
         else:
-            logs = observations["query_logs"].get("records", [])
-            failed = [x for x in logs if x.get("status", 0) >= 400]
-            families = {"rate" if x["status"] == 429 else "auth" if x["status"] == 401
-                        else "server" if x["status"] >= 500 else "other" for x in failed}
-            root, refs = "unknown", []
-            if families == {"rate"}:
-                root, refs = "rate_limit", [x["id"] for x in failed]
-            elif families == {"auth"}:
-                if "get_config" not in observations:
-                    return {"message": tool_call("get_config"), "input_tokens": 0, "output_tokens": 0}
-                configs = observations["get_config"].get("records", [])
-                if configs and configs[0].get("credential_state") == "revoked":
-                    root, refs = "credential_revoked", [x["id"] for x in failed] + [configs[0]["id"]]
-            elif families == {"server"}:
-                if "list_deployments" not in observations:
-                    return {"message": tool_call("list_deployments"), "input_tokens": 0, "output_tokens": 0}
-                deployments = observations["list_deployments"].get("records", [])
-                matches = [x for x in deployments if x.get("error_signature") and
-                           any(log.get("error_signature") == x["error_signature"] for log in failed)]
-                if matches:
-                    root, refs = "deployment_regression", [x["id"] for x in failed] + [matches[-1]["id"]]
-            if root == "unknown":
-                reply = tool_call("finish", handoff())
-            elif "search_runbook" not in observations:
-                reply = tool_call("search_runbook", {"topic": root})
-            else:
-                refs += [x["id"] for x in observations["search_runbook"].get("records", [])]
-                reply = tool_call("finish", {"root_cause": root, "action": ACTIONS[root],
-                                             "status": "diagnosed", "evidence_ids": refs})
+            records = [r for result in observations.values() for r in result.get("records", [])]
+            refs = [r["id"] for r in records]
+            ids = []
+            reason, status = "no_feasible_route", "unavailable"
+            if any(result.get("error") for result in observations.values()):
+                reason, status = "missing_data", "needs_review"
+            elif all(observations[name].get("records") for name in TOOL_NAMES):
+                policy = observations["get_policy"]["records"][0]
+                train = observations["search_intercity"]["records"][0]
+                hotel = observations["search_hotels"]["records"][0]
+                evening, morning = observations["search_local_transport"]["records"]
+                request = json.loads(messages[1]["content"])
+                total = sum(x["price_cny"] for x in (train, evening, hotel, morning))
+                deadline = datetime.fromisoformat(request["meeting_at"]) - timedelta(minutes=policy["arrival_buffer_minutes"])
+                if (hotel["price_cny"] <= policy["hotel_max_cny"] and total <= policy["trip_max_cny"]
+                        and datetime.fromisoformat(morning["end_at"]) <= deadline):
+                    reason, status = "feasible", "planned"
+                    ids = [x["id"] for x in (train, evening, hotel, morning)]
+            reply = tool_call("finish", {"status": status, "reason": reason,
+                                         "segment_ids": ids, "evidence_ids": refs})
         return {"message": reply, "input_tokens": 0, "output_tokens": 0}
 
 

@@ -5,7 +5,7 @@ import json
 import time
 
 from . import __version__
-from .domain import PACKAGE, DRAFTS, fingerprint, handoff, validate_verdict
+from .domain import PACKAGE, fingerprint, handoff, validate_verdict, normalize_request, format_draft
 from .telemetry import Tracer, utcnow
 from .tools import Tools, SCHEMAS
 
@@ -21,19 +21,22 @@ class Limits:
 
 
 class BudgetExceeded(Exception):
-    pass
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
 
 
-def investigate(scenario, provider, store, limits=None, otel=None, evaluation_id=None):
+def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=None):
     limits = limits or Limits()
     tracer = Tracer(store, otel)
-    toolbox = Tools(scenario)
-    prompt = (PACKAGE / "prompts/investigator.txt").read_text(encoding="utf-8")
+    request = normalize_request(scenario["request"])
+    toolbox = Tools(scenario, request)
+    prompt = (PACKAGE / "prompts/planner.txt").read_text(encoding="utf-8")
     started = time.perf_counter()
     deadline = started + limits.timeout_s
     run = {"trace_id": tracer.trace_id, "started_at": utcnow(), "scenario": scenario["id"],
            "provider": provider.name, "model": provider.model, "app_version": __version__,
-           "prompt_hash": fingerprint(prompt), "dataset_hash": fingerprint(scenario),
+           "prompt_hash": fingerprint(prompt), "dataset_hash": fingerprint([scenario, toolbox._data]),
            "tools_hash": fingerprint(SCHEMAS), "evaluation_id": evaluation_id,
            "status": "running", "termination": None, "input_tokens": 0, "output_tokens": 0,
            "usage_complete": True, "cost_usd": 0 if provider.name == "baseline" or getattr(provider, "pricing", None) else None,
@@ -42,8 +45,9 @@ def investigate(scenario, provider, store, limits=None, otel=None, evaluation_id
            "guardrail_blocks": 0, "observed_evidence_ids": []}
     store.save_run(run)
     messages = [{"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps(scenario["ticket"], ensure_ascii=False)}]
+                {"role": "user", "content": json.dumps(request, ensure_ascii=False)}]
     verdict = handoff()
+    tool_results = {}
 
     def check_budget():
         if time.perf_counter() >= deadline:
@@ -95,7 +99,7 @@ def investigate(scenario, provider, store, limits=None, otel=None, evaluation_id
                 if name == "finish":
                     with tracer.span("validate_result"):
                         try:
-                            verdict = validate_verdict(args, toolbox.seen, toolbox.logs_available)
+                            verdict = validate_verdict(args, toolbox.seen, request, tool_results)
                         except ValueError:
                             run["guardrail_blocks"] += 1
                             raise
@@ -121,6 +125,7 @@ def investigate(scenario, provider, store, limits=None, otel=None, evaluation_id
                     except ValueError:
                         run["guardrail_blocks"] += 1
                         raise
+                tool_results[name] = result
                 tool_message = {"role": "tool", "tool_name": name,
                                 "content": json.dumps(result, ensure_ascii=False)}
                 if "id" in calls[0]:
@@ -128,8 +133,9 @@ def investigate(scenario, provider, store, limits=None, otel=None, evaluation_id
                 messages.append(tool_message)
             else:
                 raise BudgetExceeded("steps")
-    except BudgetExceeded:
+    except BudgetExceeded as exc:
         run["termination"] = "budget_exceeded"
+        run["budget_reason"] = exc.reason
         verdict = handoff()
     except (ValueError, TypeError, KeyError, IndexError):
         run["termination"] = "invalid_response"
@@ -142,8 +148,9 @@ def investigate(scenario, provider, store, limits=None, otel=None, evaluation_id
             run["http_status"] = exc.http_status
         verdict = handoff()
     run.update({"status": verdict["status"], "verdict": verdict,
-                "draft": DRAFTS[verdict["root_cause"]], "tool_calls": toolbox.calls,
+                "draft": format_draft(verdict), "tool_calls": toolbox.calls,
                 "observed_evidence_ids": sorted(toolbox.seen),
+                "observed_tool_names": sorted(tool_results),
                 "duration_ms": round((time.perf_counter() - started) * 1000, 3),
                 "finished_at": utcnow()})
     store.save_run(run)

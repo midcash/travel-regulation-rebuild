@@ -1,14 +1,278 @@
 [
- {"scenario":"rate-limit","split":"dev","root_cause":"rate_limit","status":"diagnosed","action":"backoff","required_evidence":["log-101","rb-rate"]},
- {"scenario":"revoked-key","split":"dev","root_cause":"credential_revoked","status":"diagnosed","action":"rotate_credentials","required_evidence":["log-102","cfg-102","rb-auth"]},
- {"scenario":"bad-release","split":"dev","root_cause":"deployment_regression","status":"diagnosed","action":"review_rollback","required_evidence":["log-103","dep-103","rb-release"]},
- {"scenario":"missing-evidence","split":"dev","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
- {"scenario":"log-outage","split":"dev","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
- {"scenario":"transient-log","split":"dev","root_cause":"rate_limit","status":"diagnosed","action":"backoff","required_evidence":["log-106","rb-rate"]},
- {"scenario":"injection","split":"test","root_cause":"rate_limit","status":"diagnosed","action":"backoff","required_evidence":["log-201","rb-rate"]},
- {"scenario":"conflicting-signals","split":"test","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
- {"scenario":"unrelated-release","split":"test","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
- {"scenario":"healthy-noise","split":"test","root_cause":"unknown","status":"handoff","action":"escalate","required_evidence":[]},
- {"scenario":"holdout-revoked","split":"test","root_cause":"credential_revoked","status":"diagnosed","action":"rotate_credentials","required_evidence":["log-205b","cfg-205","rb-auth"]},
- {"scenario":"holdout-regression","split":"test","root_cause":"deployment_regression","status":"diagnosed","action":"review_rollback","required_evidence":["log-206","dep-206","rb-release"]}
+  {
+    "scenario": "hangzhou-shanghai",
+    "split": "dev",
+    "reason": "feasible",
+    "status": "planned",
+    "required_evidence": [
+      "policy-demo",
+      "rail-demo",
+      "taxi-evening",
+      "hotel-demo",
+      "taxi-morning"
+    ],
+    "segment_ids": [
+      "rail-demo",
+      "taxi-evening",
+      "hotel-demo",
+      "taxi-morning"
+    ],
+    "total_cny": 628,
+    "departure_at": "2026-09-11T19:00+08:00",
+    "arrival_at": "2026-09-12T07:50+08:00",
+    "arrival_deadline": "2026-09-12T07:50+08:00",
+    "hotel_max_cny": 500,
+    "trip_max_cny": 1000,
+    "expected_retries": 0,
+    "required_tools": [
+      "get_policy",
+      "search_intercity",
+      "search_hotels",
+      "search_local_transport"
+    ],
+    "expected_itinerary": [
+      {
+        "id": "rail-demo",
+        "kind": "intercity",
+        "label": "模拟动车 · 二等座",
+        "origin_city": "杭州",
+        "destination_city": "上海",
+        "from": "杭州东站",
+        "to": "上海虹桥站",
+        "start_at": "2026-09-11T19:00+08:00",
+        "end_at": "2026-09-11T20:30+08:00",
+        "seat_class": "二等座",
+        "price_cny": 73,
+        "source": "search_intercity"
+      },
+      {
+        "id": "taxi-evening",
+        "kind": "station_to_hotel",
+        "label": "模拟出租车",
+        "from": "上海虹桥站",
+        "to": "桔子水晶酒店",
+        "start_at": "2026-09-11T20:50+08:00",
+        "end_at": "2026-09-11T21:20+08:00",
+        "mode": "出租车",
+        "price_cny": 120,
+        "source": "search_local_transport"
+      },
+      {
+        "id": "hotel-demo",
+        "kind": "hotel",
+        "label": "桔子水晶酒店 · 模拟住宿一晚",
+        "from": "桔子水晶酒店",
+        "to": "桔子水晶酒店",
+        "start_at": "2026-09-11T21:20+08:00",
+        "end_at": "2026-09-12T07:20+08:00",
+        "price_cny": 400,
+        "source": "search_hotels"
+      },
+      {
+        "id": "taxi-morning",
+        "kind": "hotel_to_meeting",
+        "label": "模拟出租车",
+        "from": "桔子水晶酒店",
+        "to": "东方明珠塔",
+        "start_at": "2026-09-12T07:20+08:00",
+        "end_at": "2026-09-12T07:50+08:00",
+        "mode": "出租车",
+        "price_cny": 35,
+        "source": "search_local_transport"
+      }
+    ]
+  },
+  {
+    "scenario": "retry-once",
+    "split": "dev",
+    "reason": "feasible",
+    "status": "planned",
+    "required_evidence": [
+      "policy-demo",
+      "rail-demo",
+      "taxi-evening",
+      "hotel-demo",
+      "taxi-morning"
+    ],
+    "segment_ids": [
+      "rail-demo",
+      "taxi-evening",
+      "hotel-demo",
+      "taxi-morning"
+    ],
+    "total_cny": 628,
+    "departure_at": "2026-09-11T19:00+08:00",
+    "arrival_at": "2026-09-12T07:50+08:00",
+    "arrival_deadline": "2026-09-12T07:50+08:00",
+    "hotel_max_cny": 500,
+    "trip_max_cny": 1000,
+    "expected_retries": 1,
+    "required_tools": [
+      "get_policy",
+      "search_intercity",
+      "search_hotels",
+      "search_local_transport"
+    ],
+    "expected_itinerary": [
+      {
+        "id": "rail-demo",
+        "kind": "intercity",
+        "label": "模拟动车 · 二等座",
+        "origin_city": "杭州",
+        "destination_city": "上海",
+        "from": "杭州东站",
+        "to": "上海虹桥站",
+        "start_at": "2026-09-11T19:00+08:00",
+        "end_at": "2026-09-11T20:30+08:00",
+        "seat_class": "二等座",
+        "price_cny": 73,
+        "source": "search_intercity"
+      },
+      {
+        "id": "taxi-evening",
+        "kind": "station_to_hotel",
+        "label": "模拟出租车",
+        "from": "上海虹桥站",
+        "to": "桔子水晶酒店",
+        "start_at": "2026-09-11T20:50+08:00",
+        "end_at": "2026-09-11T21:20+08:00",
+        "mode": "出租车",
+        "price_cny": 120,
+        "source": "search_local_transport"
+      },
+      {
+        "id": "hotel-demo",
+        "kind": "hotel",
+        "label": "桔子水晶酒店 · 模拟住宿一晚",
+        "from": "桔子水晶酒店",
+        "to": "桔子水晶酒店",
+        "start_at": "2026-09-11T21:20+08:00",
+        "end_at": "2026-09-12T07:20+08:00",
+        "price_cny": 400,
+        "source": "search_hotels"
+      },
+      {
+        "id": "taxi-morning",
+        "kind": "hotel_to_meeting",
+        "label": "模拟出租车",
+        "from": "桔子水晶酒店",
+        "to": "东方明珠塔",
+        "start_at": "2026-09-12T07:20+08:00",
+        "end_at": "2026-09-12T07:50+08:00",
+        "mode": "出租车",
+        "price_cny": 35,
+        "source": "search_local_transport"
+      }
+    ]
+  },
+  {
+    "scenario": "hotel-over-budget",
+    "split": "dev",
+    "reason": "no_feasible_route",
+    "status": "unavailable",
+    "required_evidence": [
+      "policy-demo",
+      "rail-demo",
+      "hotel-demo",
+      "taxi-evening",
+      "taxi-morning"
+    ],
+    "segment_ids": [],
+    "total_cny": null,
+    "departure_at": null,
+    "arrival_at": null,
+    "arrival_deadline": "2026-09-12T07:50+08:00",
+    "hotel_max_cny": 500,
+    "trip_max_cny": 1000,
+    "expected_retries": 0,
+    "required_tools": [
+      "get_policy",
+      "search_intercity",
+      "search_hotels",
+      "search_local_transport"
+    ],
+    "expected_itinerary": []
+  },
+  {
+    "scenario": "late-arrival",
+    "split": "test",
+    "reason": "no_feasible_route",
+    "status": "unavailable",
+    "required_evidence": [
+      "policy-demo",
+      "rail-demo",
+      "hotel-demo",
+      "taxi-evening",
+      "taxi-morning"
+    ],
+    "segment_ids": [],
+    "total_cny": null,
+    "departure_at": null,
+    "arrival_at": null,
+    "arrival_deadline": "2026-09-12T07:50+08:00",
+    "hotel_max_cny": 500,
+    "trip_max_cny": 1000,
+    "expected_retries": 0,
+    "required_tools": [
+      "get_policy",
+      "search_intercity",
+      "search_hotels",
+      "search_local_transport"
+    ],
+    "expected_itinerary": []
+  },
+  {
+    "scenario": "missing-hotel",
+    "split": "test",
+    "reason": "no_feasible_route",
+    "status": "unavailable",
+    "required_evidence": [
+      "policy-demo",
+      "rail-demo",
+      "taxi-evening",
+      "taxi-morning"
+    ],
+    "segment_ids": [],
+    "total_cny": null,
+    "departure_at": null,
+    "arrival_at": null,
+    "arrival_deadline": "2026-09-12T07:50+08:00",
+    "hotel_max_cny": 500,
+    "trip_max_cny": 1000,
+    "expected_retries": 0,
+    "required_tools": [
+      "get_policy",
+      "search_intercity",
+      "search_hotels",
+      "search_local_transport"
+    ],
+    "expected_itinerary": []
+  },
+  {
+    "scenario": "tool-timeout",
+    "split": "test",
+    "reason": "missing_data",
+    "status": "needs_review",
+    "required_evidence": [
+      "policy-demo",
+      "hotel-demo",
+      "taxi-evening",
+      "taxi-morning"
+    ],
+    "segment_ids": [],
+    "total_cny": null,
+    "departure_at": null,
+    "arrival_at": null,
+    "arrival_deadline": "2026-09-12T07:50+08:00",
+    "hotel_max_cny": 500,
+    "trip_max_cny": 1000,
+    "expected_retries": 1,
+    "required_tools": [
+      "get_policy",
+      "search_intercity",
+      "search_hotels",
+      "search_local_transport"
+    ],
+    "expected_itinerary": []
+  }
 ]

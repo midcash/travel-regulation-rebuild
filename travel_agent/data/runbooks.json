@@ -1,6 +1,0 @@
-[
- {"id":"rb-rate","topic":"rate_limit","action":"backoff","text":"429: honor Retry-After and use bounded exponential backoff. Verify idempotency before any replay."},
- {"id":"rb-auth","topic":"credential_revoked","action":"rotate_credentials","text":"401 plus revoked configuration: ask authorized operator to rotate credentials; do not request secrets in ticket."},
- {"id":"rb-release","topic":"deployment_regression","action":"review_rollback","text":"5xx with a matching known release error signature: request human review of rollback; never roll back automatically."},
- {"id":"rb-unknown","topic":"unknown","action":"escalate","text":"Missing or conflicting evidence: escalate with available evidence and request request IDs and timestamps."}
-]

@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from .agent import investigate
+from .agent import plan_trip
 from .domain import scenario_by_id, scenarios
 from .evaluation import evaluate
 from .providers import make_provider
@@ -15,29 +15,29 @@ from .settings import load_env
 
 def main():
     load_env()
-    parser = argparse.ArgumentParser(description="Support Agent Lab")
+    parser = argparse.ArgumentParser(description="Travel Agent Lab")
     parser.add_argument("--db", default="artifacts/observability.sqlite3")
     parser.add_argument("--otel-endpoint", default=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"))
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("scenarios")
     for name in ("run", "eval", "serve"):
         child = sub.add_parser(name)
-        child.add_argument("--provider", choices=["baseline", "ollama", "deepseek"], default="baseline")
+        child.add_argument("--provider", choices=["baseline", "ollama", "deepseek"], default="deepseek")
         child.add_argument("--model", default=None)
         child.add_argument("--base-url", default=None)
         if name == "run":
-            child.add_argument("--scenario", default="rate-limit")
+            child.add_argument("--scenario", default="hangzhou-shanghai")
         elif name == "eval":
             child.add_argument("--split", choices=["all", "dev", "test"], default="all")
             child.add_argument("--repeats", type=int, choices=range(1, 11), default=1)
             child.add_argument("--output", default="artifacts/latest-evaluation.json")
         else:
-            child.add_argument("--port", type=int, default=8765)
+            child.add_argument("--port", type=int, default=8766)
     trace = sub.add_parser("trace")
     trace.add_argument("trace_id")
     args = parser.parse_args()
     if args.command == "scenarios":
-        print(json.dumps([{"id": x["id"], "ticket": x["ticket"]["text"]} for x in scenarios()], ensure_ascii=False, indent=2))
+        print(json.dumps([{"id": x["id"], "label": x["label"], "request": x["request"]} for x in scenarios()], ensure_ascii=False, indent=2))
         return 0
     store = Store(args.db)
     if args.command == "trace":
@@ -52,7 +52,7 @@ def main():
             serve(store, provider, args.port, otel)
             return 0
         if args.command == "run":
-            result = investigate(scenario_by_id(args.scenario), provider, store, otel=otel)
+            result = plan_trip(scenario_by_id(args.scenario), provider, store, otel=otel)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["termination"] == "completed" else 1
         report = evaluate(store, provider, args.split, args.repeats, otel=otel)
