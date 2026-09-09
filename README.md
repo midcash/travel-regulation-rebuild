@@ -2,7 +2,7 @@
 
 以 `F:\Commercial project\observation` 为基底：保留 agent loop、SQLite / 可选 OTLP、评测执行与质量门禁、运行观测 / 回归评测 / 全链路三个页面，只替换差旅业务。
 
-LLM 默认使用原项目相同的真实 DeepSeek 配置；主链路中的公司政策、城际交通、酒店、市内交通仍由四个本地工具返回固定演示数据。独立实验目录已跑通本地政策、途牛交通与酒店、高德驾车路线，尚未接入主链路。不支持预订或付款。规则基线只是显式选择的离线对照，不会在模型失败时自动接管。
+LLM 默认使用原项目相同的真实 DeepSeek 配置；主链路中的公司政策、城际交通、酒店、市内交通仍由四个本地工具返回固定演示数据。独立实验目录提供途牛交通与酒店、高德地点与驾车路线的全字段真实查询，尚未接入主链路；政策工具本轮不处理。不支持预订或付款。规则基线只是显式选择的离线对照，不会在模型失败时自动接管。
 
 ## 本地启动与 PyCharm
 
@@ -44,23 +44,23 @@ Copy-Item .env.example .env
 
 ## 四个工具的独立实验
 
-入口位于 [experiments/external_tools](experiments/external_tools/README.md)，迁移自 `skill` 项目，运行时不依赖其源码。PyCharm 使用当前项目 `.venv\Scripts\python.exe`，直接运行 `experiments/external_tools/run.py` 即可调试。
+入口位于 [experiments/external_tools](experiments/external_tools/README.md)，运行时不依赖原 `skill` 源码。PyCharm 使用当前项目 `.venv\Scripts\python.exe`，直接运行 `experiments/external_tools/full_run.py`。完整保留供应商字段与嵌套结构，后续集成再选择业务所需数据。
 
 ```powershell
 # 新环境安装实验依赖，并在实验目录 .env 中填写两个 API Key
 .\.venv\Scripts\python.exe -m pip install -r experiments/external_tools/requirements.txt
 # 配置格式参考 experiments/external_tools/.env.example
 # 全部真实只读查询，默认日期为中国时间今天往后第 3 天
-.\.venv\Scripts\python.exe -m experiments.external_tools.run
-# 单独测试一个工具；可选 policy / flight / train / route / hotel
-.\.venv\Scripts\python.exe -m experiments.external_tools.run --tool train
+.\.venv\Scripts\python.exe -m experiments.external_tools.full_run
+# 单独测试一个服务；可选 flight / train / hotel / amap，政策不运行
+.\.venv\Scripts\python.exe -m experiments.external_tools.full_run --only train
 # 离线合同测试，不调用供应商
-.\.venv\Scripts\python.exe -m pytest experiments/external_tools/test_tools.py -q
+.\.venv\Scripts\python.exe -m pytest experiments/external_tools/test_capture.py -q -o addopts= -p no:cacheprovider --basetemp=experiments/external_tools/results/pytest-local
 ```
 
-2026-09-09 实测政策 6 条、航班 3 条、高铁 3 条、驾车路线 1 条、酒店 3 条，26 项离线测试通过。城际交通包含航班和高铁，因此四个工具对应五项运行结果。每次输入、结果、错误及耗时保存在实验目录的 `results/<时间戳>/`，该目录及密钥文件不进入 Git。
+2026-09-09 完整全字段样本执行47次请求，45次成功；航班周边机场两种模式返回供应商业务错误并保留记录。已查询搜索、分页、航班舱位/火车席别/酒店房型详情、地点与扩展驾车数据。每次原始响应、解析结果、字段覆盖率和错误保存在 `results/full_<时间戳>/`，该目录及密钥文件不进入 Git。字段未返回、字段为空和请求失败分别记录，不宣称所有可选字段都必然有值。
 
-集成时需注意：交通只按日期查询，时间窗必须由下游过滤；酒店 `lowestPrice` 不能直接认定为整段住宿总价；高德路线需要 GCJ-02 坐标。政策有效期与适用对象、酒店坐标和可退条件也需要下游核验。完整输入输出和限制见 [实验说明与能力边界](experiments/external_tools/README.md)。
+原 `run.py` 和业务 DTO 保留作对照，不代表全字段输出；其中政策路径仍指向已删除的旧文件，不能继续把旧政策成功记录当成当前状态。全字段入口不运行政策。完整运行方法、数据口径和已知限制见 [实验说明与能力边界](experiments/external_tools/README.md)。
 
 ## 开发与验证
 
