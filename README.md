@@ -2,7 +2,7 @@
 
 以 `F:\Commercial project\observation` 为基底：保留 agent loop、SQLite / 可选 OTLP、评测执行与质量门禁、运行观测 / 回归评测 / 全链路三个页面，只替换差旅业务。
 
-LLM 默认使用原项目相同的真实 DeepSeek 配置；公司政策、城际交通、酒店、市内交通由四个本地工具返回固定演示数据。没有真实业务 API、预订或付款。规则基线只是显式选择的离线对照，不会在模型失败时自动接管。
+LLM 默认使用原项目相同的真实 DeepSeek 配置；主链路中的公司政策、城际交通、酒店、市内交通仍由四个本地工具返回固定演示数据。独立实验目录已跑通本地政策、途牛交通与酒店、高德驾车路线，尚未接入主链路。不支持预订或付款。规则基线只是显式选择的离线对照，不会在模型失败时自动接管。
 
 ## 本地启动与 PyCharm
 
@@ -41,6 +41,26 @@ Copy-Item .env.example .env
 模拟总价 628 元。演示政策为前一天 18:00 起出发、酒店每晚 ≤500 元、总价 ≤1000 元、至少提前 10 分钟到达。不计算出发地到出发车站及站内时间。酒店和交通时间均是测试数据，不代表真实报价或路线。
 
 页面选择“自定义会议”可填写城市、地点和日期时间（北京时间），工具按会议日期生成前晚和次晨数据。首版数据只覆盖“杭州 / 上海 / 东方明珠塔”，其他输入明确返回无可行方案。暂不做自然语言日期解析、多方案搜索或实际路线优化。
+
+## 四个工具的独立实验
+
+入口位于 [experiments/external_tools](experiments/external_tools/README.md)，迁移自 `skill` 项目，运行时不依赖其源码。PyCharm 使用当前项目 `.venv\Scripts\python.exe`，直接运行 `experiments/external_tools/run.py` 即可调试。
+
+```powershell
+# 新环境安装实验依赖，并在实验目录 .env 中填写两个 API Key
+.\.venv\Scripts\python.exe -m pip install -r experiments/external_tools/requirements.txt
+# 配置格式参考 experiments/external_tools/.env.example
+# 全部真实只读查询，默认日期为中国时间今天往后第 3 天
+.\.venv\Scripts\python.exe -m experiments.external_tools.run
+# 单独测试一个工具；可选 policy / flight / train / route / hotel
+.\.venv\Scripts\python.exe -m experiments.external_tools.run --tool train
+# 离线合同测试，不调用供应商
+.\.venv\Scripts\python.exe -m pytest experiments/external_tools/test_tools.py -q
+```
+
+2026-09-09 实测政策 6 条、航班 3 条、高铁 3 条、驾车路线 1 条、酒店 3 条，26 项离线测试通过。城际交通包含航班和高铁，因此四个工具对应五项运行结果。每次输入、结果、错误及耗时保存在实验目录的 `results/<时间戳>/`，该目录及密钥文件不进入 Git。
+
+集成时需注意：交通只按日期查询，时间窗必须由下游过滤；酒店 `lowestPrice` 不能直接认定为整段住宿总价；高德路线需要 GCJ-02 坐标。政策有效期与适用对象、酒店坐标和可退条件也需要下游核验。完整输入输出和限制见 [实验说明与能力边界](experiments/external_tools/README.md)。
 
 ## 开发与验证
 
