@@ -13,7 +13,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from experiments.external_tools.capture import Capture, payload
+from .capture import Capture, payload
 from .regulation_policy import RegulationPolicyError, load_regulation_policy
 
 POI_FIELDS = "children,business,indoor,navi,photos"
@@ -92,6 +92,22 @@ class HilTools:
         )
         data, failure = _payload_or_error(record)
         if failure:
+            if _is_empty_supplier_result(record):
+                return _ok(
+                    "search_transport",
+                    {
+                        "mode": mode,
+                        "origin": origin,
+                        "destination": destination,
+                        "departure_date": str(departure_date),
+                        "service_class": service_class,
+                        "candidates": [],
+                        "supplier_total_pages": 0,
+                        "returned_count": 0,
+                    },
+                    [record["call_id"]],
+                    ["supplier returned no transport service for this route/date"],
+                )
             return _error("search_transport", **failure)
         rows = data.get("data", [])
         if not isinstance(rows, list):
@@ -232,6 +248,9 @@ class HilTools:
             for row in rows[:max_results]
             if isinstance(row, Mapping)
         ]
+        for candidate in candidates:
+            if not candidate.get("hotel_id") and str(candidate.get("candidate_id", "")).startswith("hotel:"):
+                candidate["hotel_id"] = str(candidate["candidate_id"]).split(":", 1)[1]
         return _ok(
             "search_stays",
             {
@@ -255,11 +274,12 @@ class HilTools:
         max_rooms: int = 10,
         max_rates_per_room: int = 5,
     ) -> dict[str, Any]:
+        provider_hotel_id: str | int = int(hotel_id) if str(hotel_id).isdigit() else hotel_id
         record = await self.capture.tuniu(
             "hotel",
             "tuniuHotelDetail",
             {
-                "hotelId": hotel_id,
+                "hotelId": provider_hotel_id,
                 "checkIn": str(check_in),
                 "checkOut": str(check_out),
                 "roomNum": 1,
@@ -325,14 +345,14 @@ class HilTools:
                 if detail["status"] == "ok":
                     evidence.append(detail["call_id"])
                     detail_data, _ = _payload_or_error(detail)
-                    item["detail"] = _first_mapping(detail_data.get("pois"))
+                    item["detail"] = _trim_place_detail(_first_mapping(detail_data.get("pois")))
                 geocode = await self.capture.amap(
                     "geocode", {"address": f"{city}{row.get('address') or ''}{row.get('name') or ''}", "city": city}, search["call_id"]
                 )
                 if geocode["status"] == "ok":
                     evidence.append(geocode["call_id"])
                     geocode_data, _ = _payload_or_error(geocode)
-                    item["geocode"] = _first_mapping(geocode_data.get("geocodes"))
+                    item["geocode"] = _trim_geocode(_first_mapping(geocode_data.get("geocodes")))
             candidates.append(item)
         return _ok(
             "resolve_place",
@@ -424,6 +444,16 @@ def _payload_or_error(record: Mapping[str, Any]) -> tuple[dict[str, Any], dict[s
     if not isinstance(value, dict):
         return {}, {"error_type": "SchemaError", "message": "supplier payload is not an object", "record": record}
     return value, None
+
+
+def _is_empty_supplier_result(record: Mapping[str, Any]) -> bool:
+    """Recognize a supplier's explicit no-service response separately from a failure."""
+    return any(
+        isinstance(item, Mapping)
+        and item.get("successCode") is False
+        and item.get("data") is None
+        for item in record.get("payloads", [])
+    )
 
 
 def _text(value: Any) -> str | None:
@@ -556,11 +586,15 @@ def _place_summary(row: Mapping[str, Any], rank: int, evidence: str) -> dict[str
 
 
 def _route_summary(path: Mapping[str, Any], rank: int) -> dict[str, Any]:
+    duration = _int_or_none(path.get("duration"))
+    cost = path.get("cost")
+    if duration is None and isinstance(cost, Mapping):
+        duration = _int_or_none(cost.get("duration"))
     return {
         "route_id": f"route:{rank}",
         "rank": rank,
         "distance_meters": _int_or_none(path.get("distance")),
-        "duration_seconds": _int_or_none(path.get("duration")),
+        "duration_seconds": duration,
         "restriction": path.get("restriction"),
         "cost": path.get("cost"),
         "steps_count": len(path.get("steps", [])) if isinstance(path.get("steps"), list) else None,
@@ -573,3 +607,21 @@ def _int_or_none(value: Any) -> int | None:
         return int(str(value)) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _trim_place_detail(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return {
+        key: value.get(key)
+        for key in ("id", "name", "address", "location", "type", "business_area", "rating", "tel", "entr_location")
+    }
+
+
+def _trim_geocode(value: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return {
+        key: value.get(key)
+        for key in ("formatted_address", "province", "city", "district", "adcode", "location", "level")
+    }
