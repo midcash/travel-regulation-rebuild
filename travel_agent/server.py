@@ -32,6 +32,9 @@ class Application:
             raise ValueError("Start server with --provider ollama to enable a real model")
         provider = self.provider if selected == self.provider.name else make_provider(selected)
         if kind == "run":
+            tool_mode = body.get("tool_mode", "demo")
+            if tool_mode not in {"demo", "real"}:
+                raise ValueError("Invalid tool mode")
             scenario = custom_scenario(body["request"]) if "request" in body else scenario_by_id(body.get("scenario", "hangzhou-shanghai"))
         else:
             split, repeats = body.get("split", "all"), body.get("repeats", 1)
@@ -48,7 +51,7 @@ class Application:
 
         def work():
             try:
-                result = plan_trip(scenario, provider, self.store, otel=self.otel) if kind == "run" else evaluate(
+                result = plan_trip(scenario, provider, self.store, otel=self.otel, tool_mode=tool_mode) if kind == "run" else evaluate(
                     self.store, provider, split, repeats, otel=self.otel)
                 update = {"status": "completed", "result_id": result["trace_id"] if kind == "run" else result["id"]}
             except Exception as exc:

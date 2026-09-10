@@ -1,0 +1,23 @@
+{
+  "trace_id": "554c3c1015b246009e38d978f486bc89",
+  "provider": "deepseek",
+  "model": "deepseek-v4-flash",
+  "tool_mode": "real",
+  "termination": "completed",
+  "status": "needs_review",
+  "model_calls": 2,
+  "tool_calls": 1,
+  "observed_evidence_ids": [
+    "554c3c1015b246009e38d978f486bc89:tool:1:policy"
+  ],
+  "request": {
+    "origin": "杭州",
+    "destination": "上海",
+    "meeting_location": "东方明珠塔",
+    "meeting_at": "2026-09-12T08:00+08:00"
+  },
+  "policy_content_hash": "14e89ab8c38fa908dd9652cff0ba5310dd491f6d070736c70a27ce418555c49d",
+  "policy_source": "travel_agent/policies/浙江省机关工作人员差旅费管理规定.md",
+  "expected": "completed; needs_review/missing_data; no itinerary or total cost; policy source/hash recorded",
+  "actual_reason": "missing_data"
+}

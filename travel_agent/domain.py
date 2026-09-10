@@ -61,7 +61,7 @@ def handoff():
             "evidence_ids": [], "itinerary": [], "total_cny": None}
 
 
-def validate_verdict(value, seen, request, tool_results=None):
+def validate_verdict(value, seen, request, tool_results=None, tool_mode="demo"):
     if not isinstance(value, dict) or set(value) != {"status", "reason", "segment_ids", "evidence_ids"}:
         raise ValueError("Invalid verdict schema")
     reason = value["reason"]
@@ -74,6 +74,10 @@ def validate_verdict(value, seen, request, tool_results=None):
         if (not isinstance(ids, list) or len(ids) > 20 or any(not isinstance(x, str) for x in ids)
                 or len(set(ids)) != len(ids) or not set(ids).issubset(seen)):
             raise ValueError("Unobserved or duplicate evidence")
+    if tool_mode == "real":
+        if reason != "missing_data" or value["segment_ids"]:
+            raise ValueError("Policy alone cannot establish a travel plan or market unavailability")
+        return {**value, "itinerary": [], "total_cny": None}
     if reason != "feasible":
         required = {"get_policy", "search_intercity", "search_hotels", "search_local_transport"}
         if tool_results is None or not required.issubset(tool_results):

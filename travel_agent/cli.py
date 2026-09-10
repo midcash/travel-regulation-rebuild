@@ -27,6 +27,7 @@ def main():
         child.add_argument("--base-url", default=None)
         if name == "run":
             child.add_argument("--scenario", default="hangzhou-shanghai")
+            child.add_argument("--tool-mode", choices=["demo", "real"], default="demo")
         elif name == "eval":
             child.add_argument("--split", choices=["all", "dev", "test"], default="all")
             child.add_argument("--repeats", type=int, choices=range(1, 11), default=1)
@@ -52,7 +53,7 @@ def main():
             serve(store, provider, args.port, otel)
             return 0
         if args.command == "run":
-            result = plan_trip(scenario_by_id(args.scenario), provider, store, otel=otel)
+            result = plan_trip(scenario_by_id(args.scenario), provider, store, otel=otel, tool_mode=args.tool_mode)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["termination"] == "completed" else 1
         report = evaluate(store, provider, args.split, args.repeats, otel=otel)

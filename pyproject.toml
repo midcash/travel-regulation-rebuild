@@ -19,4 +19,4 @@ travel-agent = "travel_agent.cli:main"
 include = ["travel_agent*"]
 
 [tool.setuptools.package-data]
-travel_agent = ["data/*.json", "prompts/*.txt", "web/*"]
+travel_agent = ["data/*.json", "policies/*.md", "prompts/*.txt", "web/*"]

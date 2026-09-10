@@ -8,6 +8,7 @@ from . import __version__
 from .domain import PACKAGE, fingerprint, handoff, validate_verdict, normalize_request, format_draft
 from .telemetry import Tracer, utcnow
 from .tools import Tools, SCHEMAS
+from .real_tools import RealTools, REAL_SCHEMAS
 
 
 @dataclass(frozen=True)
@@ -26,18 +27,23 @@ class BudgetExceeded(Exception):
         super().__init__(reason)
 
 
-def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=None):
+def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=None, *, tool_mode="demo", policy_path=None):
+    if tool_mode not in {"demo", "real"}:
+        raise ValueError("Unknown tool mode")
     limits = limits or Limits()
     tracer = Tracer(store, otel)
     request = normalize_request(scenario["request"])
-    toolbox = Tools(scenario, request)
-    prompt = (PACKAGE / "prompts/planner.txt").read_text(encoding="utf-8")
+    if tool_mode == "real":
+        request.pop("earliest_departure", None)
+    toolbox = RealTools(tracer.trace_id, policy_path) if tool_mode == "real" else Tools(scenario, request)
+    schemas = REAL_SCHEMAS if tool_mode == "real" else SCHEMAS
+    prompt = (PACKAGE / "prompts" / ("real_planner.txt" if tool_mode == "real" else "planner.txt")).read_text(encoding="utf-8")
     started = time.perf_counter()
     deadline = started + limits.timeout_s
     run = {"trace_id": tracer.trace_id, "started_at": utcnow(), "scenario": scenario["id"],
            "provider": provider.name, "model": provider.model, "app_version": __version__,
            "prompt_hash": fingerprint(prompt), "dataset_hash": fingerprint([scenario, toolbox._data]),
-           "tools_hash": fingerprint(SCHEMAS), "evaluation_id": evaluation_id,
+           "tools_hash": fingerprint(schemas), "evaluation_id": evaluation_id, "tool_mode": tool_mode,
            "status": "running", "termination": None, "input_tokens": 0, "output_tokens": 0,
            "usage_complete": True, "cost_usd": 0 if provider.name == "baseline" or getattr(provider, "pricing", None) else None,
            "pricing_usd_per_million": getattr(provider, "pricing", None), "cache_hit_tokens": 0,
@@ -62,7 +68,7 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                 with tracer.span("policy_decision" if provider.name == "baseline" else "chat", step=step + 1) as attrs:
                     run["model_calls"] += 1
                     try:
-                        response = provider.chat(messages, SCHEMAS,
+                        response = provider.chat(messages, schemas,
                                                  min(limits.model_timeout_s, deadline - time.perf_counter()))
                     except Exception:
                         run["usage_complete"] = False
@@ -90,7 +96,7 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                     if not isinstance(name, str):
                         raise ValueError("Invalid tool name")
                     # Name is constrained before it can enter telemetry.
-                    if name not in {s["function"]["name"] for s in SCHEMAS}:
+                    if name not in {s["function"]["name"] for s in schemas}:
                         run["guardrail_blocks"] += 1
                         raise ValueError("Unknown tool")
                     attrs["selected_tool"] = name
@@ -99,7 +105,7 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                 if name == "finish":
                     with tracer.span("validate_result"):
                         try:
-                            verdict = validate_verdict(args, toolbox.seen, request, tool_results)
+                            verdict = validate_verdict(args, toolbox.seen, request, tool_results, tool_mode)
                         except ValueError:
                             run["guardrail_blocks"] += 1
                             raise
@@ -114,7 +120,15 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                     try:
                         with tracer.span("execute_tool", tool=name, attempt=attempt + 1) as attrs:
                             result = toolbox.execute(name, args)
-                            attrs["record_count"] = len(result["records"])
+                            attrs["record_count"] = len(result.get("records", []))
+                            if tool_mode == "real":
+                                attrs["call_id"] = result["call_id"]
+                                attrs["tool_status"] = result["status"]
+                                if result["status"] == "ok":
+                                    attrs["content_hash"] = result["data"]["content_hash"]
+                                    attrs["source_ref"] = result["data"]["source_ref"]
+                                else:
+                                    attrs["error.type"] = result["error"]["type"]
                         break
                     except TimeoutError:
                         if attempt == 0:
@@ -125,7 +139,7 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                     except ValueError:
                         run["guardrail_blocks"] += 1
                         raise
-                tool_results[name] = result
+                tool_results[result["call_id"] if tool_mode == "real" else name] = result
                 tool_message = {"role": "tool", "tool_name": name,
                                 "content": json.dumps(result, ensure_ascii=False)}
                 if "id" in calls[0]:
@@ -150,8 +164,11 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
     run.update({"status": verdict["status"], "verdict": verdict,
                 "draft": format_draft(verdict), "tool_calls": toolbox.calls,
                 "observed_evidence_ids": sorted(toolbox.seen),
-                "observed_tool_names": sorted(tool_results),
+                "observed_tool_names": sorted({r["tool"] for r in tool_results.values()}) if tool_mode == "real" else sorted(tool_results),
                 "duration_ms": round((time.perf_counter() - started) * 1000, 3),
                 "finished_at": utcnow()})
+    if tool_mode == "real":
+        run["evidence"] = list(toolbox.seen.values())
+        run["tool_results"] = list(toolbox.history.values())
     store.save_run(run)
     return run
