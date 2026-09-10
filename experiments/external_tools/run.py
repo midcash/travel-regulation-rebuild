@@ -26,6 +26,7 @@ from experiments.external_tools.policy import PolicyDocumentError, PolicySnapsho
 from experiments.external_tools.tuniu import TuniuTravelProvider
 
 HERE = Path(__file__).resolve().parent
+POLICY_PATH = HERE / "policy.md"
 CHINA = timezone(timedelta(hours=8))
 
 
@@ -40,7 +41,7 @@ async def run(args: argparse.Namespace) -> bool:
     folder = HERE / "results" / run_id
     folder.mkdir(parents=True)
     queries = {
-        "policy": HERE / "policy.md",
+        "policy": POLICY_PATH,
         "flight": TransportQuery(
             query_id="lab-flight",
             trace_id=run_id,
