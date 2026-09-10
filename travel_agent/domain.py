@@ -29,13 +29,17 @@ def scenario_by_id(identifier):
     raise ValueError("Unknown scenario")
 
 
-def normalize_request(value):
+def normalize_request(value, tool_mode="demo"):
     fields = {"origin", "destination", "meeting_location", "meeting_at"}
-    if not isinstance(value, dict) or set(value) != fields:
+    if not isinstance(value, dict) or not fields.issubset(value) or set(value) - fields - {"transport_mode", "arrive_previous_day"}:
         raise ValueError("Expected origin, destination, meeting_location and meeting_at")
-    if any(not isinstance(v, str) or not v.strip() or len(v) > 120 for v in value.values()):
+    if any(not isinstance(v, str) or not v.strip() or len(v) > 120 for v in (value[k] for k in fields)):
         raise ValueError("Invalid request field")
-    result = {k: v.strip() for k, v in value.items()}
+    if "transport_mode" in value and value["transport_mode"] not in ("flight", "train", "any"):
+        raise ValueError("Invalid transport mode")
+    if "arrive_previous_day" in value and type(value["arrive_previous_day"]) is not bool:
+        raise ValueError("Invalid previous-day arrival requirement")
+    result = {k: v.strip() if isinstance(v, str) else v for k, v in value.items()}
     try:
         meeting = datetime.fromisoformat(result["meeting_at"])
         if meeting.tzinfo is None:
@@ -45,7 +49,14 @@ def normalize_request(value):
     except (ValueError, OverflowError) as exc:
         raise ValueError("Invalid meeting date or timezone") from exc
     result["meeting_at"] = meeting.isoformat(timespec="minutes")
-    result["earliest_departure"] = f"{previous}T18:00+08:00"
+    if tool_mode == "real":
+        result.setdefault("transport_mode", "any")
+        result.setdefault("arrive_previous_day", True)
+        if result["arrive_previous_day"]:
+            result["required_arrival_date"] = str(previous)
+            result["stay_nights"] = 1
+    else:
+        result["earliest_departure"] = f"{previous}T18:00+08:00"
     return result
 
 
@@ -76,7 +87,7 @@ def validate_verdict(value, seen, request, tool_results=None, tool_mode="demo"):
             raise ValueError("Unobserved or duplicate evidence")
     if tool_mode == "real":
         if reason != "missing_data" or value["segment_ids"]:
-            raise ValueError("Policy alone cannot establish a travel plan or market unavailability")
+            raise ValueError("Partial evidence cannot establish a travel plan or market unavailability")
         return {**value, "itinerary": [], "total_cny": None}
     if reason != "feasible":
         required = {"get_policy", "search_intercity", "search_hotels", "search_local_transport"}

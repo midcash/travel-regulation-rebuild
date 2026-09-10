@@ -7,6 +7,8 @@ ALLOWED = {"DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL", "OLLAMA_MO
            "DEEPSEEK_INPUT_USD_PER_MILLION", "DEEPSEEK_CACHE_USD_PER_MILLION", "DEEPSEEK_OUTPUT_USD_PER_MILLION"}
 
 
+ALLOWED.update({"TUNIU_API_KEY", "TUNIU_FLIGHT_URL", "TUNIU_TRAIN_URL"})
+
 def load_env(path=".env"):
     source = Path(path)
     if not source.is_file():

@@ -27,15 +27,14 @@ class BudgetExceeded(Exception):
         super().__init__(reason)
 
 
-def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=None, *, tool_mode="demo", policy_path=None):
+def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=None, *, tool_mode="demo", policy_path=None, transport_http=None):
     if tool_mode not in {"demo", "real"}:
         raise ValueError("Unknown tool mode")
     limits = limits or Limits()
     tracer = Tracer(store, otel)
-    request = normalize_request(scenario["request"])
-    if tool_mode == "real":
-        request.pop("earliest_departure", None)
-    toolbox = RealTools(tracer.trace_id, policy_path) if tool_mode == "real" else Tools(scenario, request)
+    request = normalize_request(scenario["request"], tool_mode)
+    toolbox = RealTools(tracer.trace_id, policy_path, request=request,
+                        evidence_dir=store.path.parent / "evidence" / tracer.trace_id, transport_http=transport_http) if tool_mode == "real" else Tools(scenario, request)
     schemas = REAL_SCHEMAS if tool_mode == "real" else SCHEMAS
     prompt = (PACKAGE / "prompts" / ("real_planner.txt" if tool_mode == "real" else "planner.txt")).read_text(encoding="utf-8")
     started = time.perf_counter()
@@ -119,16 +118,23 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                         raise BudgetExceeded("tool_calls")
                     try:
                         with tracer.span("execute_tool", tool=name, attempt=attempt + 1) as attrs:
-                            result = toolbox.execute(name, args)
+                            result = (toolbox.execute(name, args, timeout=max(0.001, deadline - time.perf_counter()))
+                                      if tool_mode == "real" else toolbox.execute(name, args))
                             attrs["record_count"] = len(result.get("records", []))
                             if tool_mode == "real":
                                 attrs["call_id"] = result["call_id"]
                                 attrs["tool_status"] = result["status"]
-                                if result["status"] == "ok":
+                                if result["status"] == "ok" and name == "get_policy_snapshot":
                                     attrs["content_hash"] = result["data"]["content_hash"]
                                     attrs["source_ref"] = result["data"]["source_ref"]
-                                else:
+                                elif result["status"] == "error":
                                     attrs["error.type"] = result["error"]["type"]
+                                if name == "search_transport":
+                                    attrs["http_requests"] = result["http_requests"]
+                                    if result["data"] is not None:
+                                        attrs["query_date"] = result["data"]["departure_date"]
+                                        attrs["mode"] = result["data"]["mode"]
+                                        attrs["record_count"] = result["data"]["returned_count"]
                         break
                     except TimeoutError:
                         if attempt == 0:
@@ -168,6 +174,8 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                 "duration_ms": round((time.perf_counter() - started) * 1000, 3),
                 "finished_at": utcnow()})
     if tool_mode == "real":
+        run["request"] = request
+        run["http_requests"] = toolbox.http_requests
         run["evidence"] = list(toolbox.seen.values())
         run["tool_results"] = list(toolbox.history.values())
     store.save_run(run)

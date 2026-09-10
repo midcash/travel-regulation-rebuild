@@ -84,7 +84,7 @@ class IntegrationTests(unittest.TestCase):
                 headers={"Content-Type": "application/json", "X-Travel-Client": "dashboard"})
             with urllib.request.urlopen(req, timeout=5) as response:
                 return json.loads(response.read())
-        self.assertEqual(fetch("/api/config")["real_tools"], ["get_policy_snapshot"])
+        self.assertEqual(fetch("/api/config")["real_tools"], ["get_policy_snapshot", "search_transport"])
         job = fetch("/api/run", {"provider": "deepseek", "tool_mode": "real", "scenario": "hangzhou-shanghai"})
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
@@ -138,3 +138,4 @@ class IntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from .agent import plan_trip
-from .domain import scenario_by_id, scenarios
+from .domain import scenario_by_id, scenarios, custom_scenario
 from .evaluation import evaluate
 from .providers import make_provider
 from .telemetry import Store, make_otel
@@ -27,6 +27,7 @@ def main():
         child.add_argument("--base-url", default=None)
         if name == "run":
             child.add_argument("--scenario", default="hangzhou-shanghai")
+            child.add_argument("--request-file", help="UTF-8 JSON structured request")
             child.add_argument("--tool-mode", choices=["demo", "real"], default="demo")
         elif name == "eval":
             child.add_argument("--split", choices=["all", "dev", "test"], default="all")
@@ -53,7 +54,9 @@ def main():
             serve(store, provider, args.port, otel)
             return 0
         if args.command == "run":
-            result = plan_trip(scenario_by_id(args.scenario), provider, store, otel=otel, tool_mode=args.tool_mode)
+            scenario = (custom_scenario(json.loads(Path(args.request_file).read_text(encoding="utf-8-sig")))
+                        if args.request_file else scenario_by_id(args.scenario))
+            result = plan_trip(scenario, provider, store, otel=otel, tool_mode=args.tool_mode)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["termination"] == "completed" else 1
         report = evaluate(store, provider, args.split, args.repeats, otel=otel)
