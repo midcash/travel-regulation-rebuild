@@ -14,6 +14,7 @@ from .agent import plan_trip
 from .domain import PACKAGE, scenarios, scenario_by_id, custom_scenario
 from .evaluation import evaluate
 from .providers import make_provider
+from .real_tools import REAL_SCHEMAS
 
 
 class Application:
@@ -33,6 +34,8 @@ class Application:
         provider = self.provider if selected == self.provider.name else make_provider(selected)
         if kind == "run":
             tool_mode = body.get("tool_mode", "demo")
+            if tool_mode == "real" and selected == "baseline":
+                raise ValueError("真实工具模式需要选择 DeepSeek 或 Ollama 模型")
             if tool_mode not in {"demo", "real"}:
                 raise ValueError("Invalid tool mode")
             scenario = custom_scenario(body["request"]) if "request" in body else scenario_by_id(body.get("scenario", "hangzhou-shanghai"))
@@ -106,7 +109,7 @@ def make_server(store, provider, port=8766, otel=None):
             if path == "/api/health":
                 return self.send(200, {"status": "ok"})
             if path == "/api/config":
-                return self.send(200, {"ollama_enabled": provider.name == "ollama", "model": provider.model,
+                return self.send(200, {"real_tools": [s["function"]["name"] for s in REAL_SCHEMAS if s["function"]["name"] != "finish"], "ollama_enabled": provider.name == "ollama", "model": provider.model,
                     "deepseek_enabled": bool(os.getenv("DEEPSEEK_API_KEY")),
                     "deepseek_model": provider.model if provider.name == "deepseek" else os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
                     "scenarios": [{"id": x["id"], "label": x["label"], "request": x["request"]} for x in scenarios()]})

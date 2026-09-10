@@ -73,6 +73,36 @@ class IntegrationTests(unittest.TestCase):
                 fetch("/api/run", {"request": {**request, "meeting_at": invalid}})
             self.assertEqual(caught.exception.code, 400)
 
+    def test_web_real_mode_runs_policy_and_rejects_baseline(self):
+        from test_policy import PolicyModel, POLICY_HASH
+        class Model(PolicyModel):
+            name = "deepseek"
+        base = self.start(make_server(self.store, Model(), port=0))
+        def fetch(path, body=None):
+            req = urllib.request.Request(base + path,
+                data=json.dumps(body).encode() if body is not None else None,
+                headers={"Content-Type": "application/json", "X-Travel-Client": "dashboard"})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                return json.loads(response.read())
+        self.assertEqual(fetch("/api/config")["real_tools"], ["get_policy_snapshot"])
+        job = fetch("/api/run", {"provider": "deepseek", "tool_mode": "real", "scenario": "hangzhou-shanghai"})
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            result = fetch("/api/jobs/" + job["id"])
+            if result["status"] != "running":
+                break
+            time.sleep(.02)
+        self.assertEqual(result["status"], "completed")
+        trace = fetch("/api/runs/" + result["result_id"])
+        self.assertEqual(trace["tool_mode"], "real")
+        self.assertEqual(trace["termination"], "completed")
+        self.assertEqual(trace["verdict"]["reason"], "missing_data")
+        self.assertEqual(trace["evidence"][0]["data"]["content_hash"], POLICY_HASH)
+        for mode in ("real", "unknown"):
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                fetch("/api/run", {"provider": "baseline", "tool_mode": mode})
+            self.assertEqual(caught.exception.code, 400)
+
     def test_optional_otlp_exports_same_chain_and_trace_link(self):
         try:
             from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
