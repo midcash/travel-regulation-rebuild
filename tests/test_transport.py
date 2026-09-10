@@ -30,6 +30,19 @@ class TransportModel:
         return {"message": message, "input_tokens": 0, "output_tokens": 0}
 
 
+class RequeryModel(TransportModel):
+    def __init__(self, queries):
+        self.queries = queries
+
+    def chat(self, messages, schemas, timeout):
+        count = sum(m["role"] == "tool" for m in messages)
+        if count < len(self.queries):
+            args = {"mode": "flight", "origin": "杭州", "destination": "三亚",
+                    "departure_date": "2026-09-18", **self.queries[count]}
+            return {"message": tool_call("search_transport", args), "input_tokens": 0, "output_tokens": 0}
+        return super().chat(messages, schemas, timeout)
+
+
 class TransportTests(unittest.TestCase):
     def test_afternoon_flight_is_retained_with_request_and_evidence(self):
         def supplier(request):
@@ -175,12 +188,129 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(run["tool_results"][0]["data"]["candidates"], [])
         self.assertEqual(run["verdict"]["reason"], "missing_data")
 
+    def test_evidence_write_failure_preserves_supplier_result_and_request_count(self):
+        def supplier(request):
+            return self.response(request, [{"flightNumber": "HU7386",
+                "departureTime": "2026-09-18 16:05:00", "arrivalTime": "2026-09-18 18:55:00"}])
+        with patch.object(Path, "write_text", side_effect=PermissionError("test-secret write failed")):
+            run, trace, files = self.run_supplier(supplier)
+        self.assertEqual(run["termination"], "completed")
+        self.assertEqual(run["http_requests"], 1)
+        self.assertEqual(run["retries"], 0)
+        result = run["tool_results"][0]
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["data"]["candidates"][0]["flight_no"], "HU7386")
+        self.assertEqual(result["evidence_error"]["type"], "EvidenceWriteError")
+        self.assertFalse(result["evidence_error"]["retryable"])
+        self.assertTrue(result["warnings"])
+        self.assertEqual(run["observed_evidence_ids"], result["evidence_refs"])
+        self.assertEqual(files, [])
+        self.assertNotIn("source_ref", run["evidence"][0]["supplier_evidence"])
+        self.assertEqual(trace["tool_results"], run["tool_results"])
+        span = next(s for s in trace["spans"] if s["name"] == "execute_tool")
+        self.assertEqual(span["attributes"]["http_requests"], 1)
+        self.assertEqual(span["attributes"]["evidence_error.type"], "EvidenceWriteError")
+        self.assertNotIn("test-secret", json.dumps(trace))
+
     def test_missing_key_never_contacts_supplier(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"TUNIU_API_KEY": ""}):
-            run = plan_trip({"id": "missing-key", "request": REQUEST}, TransportModel(),
+            run = plan_trip({"id": "missing-key", "request": REQUEST}, RequeryModel([{}, {}]),
                 Store(Path(directory) / "trace.sqlite3"), tool_mode="real",
                 transport_http=httpx.MockTransport(lambda req: self.fail("Unexpected HTTP request")))
             self.assertEqual(run["termination"], "completed")
             self.assertEqual(run["http_requests"], 0)
+            self.assertEqual(run["tool_calls"], 2)
+            self.assertEqual(run["retries"], 0)
             self.assertEqual(run["tool_results"][0]["error"]["type"], "ConfigurationError")
             self.assertEqual(run["evidence"], [])
+
+    def test_model_retries_are_counted_and_linked_to_failed_attempts(self):
+        requests = []
+        def supplier(request):
+            requests.append(json.loads(request.content)["params"])
+            if len(requests) < 3:
+                raise httpx.ReadTimeout("test-secret timeout", request=request)
+            return self.response(request, [])
+        model = RequeryModel([{}, {"service_class": "any", "max_results": 5}, {}])
+        run, trace, files = self.run_supplier(supplier, model)
+        self.assertEqual(run["termination"], "completed")
+        self.assertEqual(run["retries"], 2)
+        self.assertEqual(run["http_requests"], 3)
+        self.assertEqual(run["tool_calls"], 3)
+        self.assertEqual(len(requests), 3)
+        self.assertEqual(requests[0], requests[1])
+        self.assertEqual(requests[1], requests[2])
+        results = run["tool_results"]
+        self.assertEqual([r["status"] for r in results], ["error", "error", "ok"])
+        self.assertEqual([r["attempt"] for r in results], [1, 2, 3])
+        self.assertEqual([r["retry_of"] for r in results], [None, results[0]["call_id"], results[1]["call_id"]])
+        spans = [s for s in trace["spans"] if s["name"] == "execute_tool"]
+        self.assertEqual([s["attributes"]["attempt"] for s in spans], [1, 2, 3])
+        self.assertEqual(spans[-1]["attributes"]["retry_of"], results[1]["call_id"])
+        self.assertEqual(len(set(run["observed_evidence_ids"])), 3)
+        self.assertEqual(len(files), 3)
+
+    def test_changed_query_and_successful_refresh_are_not_retries(self):
+        requests = []
+        def supplier(request):
+            requests.append(json.loads(request.content)["params"]["arguments"])
+            if len(requests) == 1:
+                raise httpx.ReadTimeout("offline timeout", request=request)
+            return self.response(request, [])
+        model = RequeryModel([{}, {"departure_date": "2026-09-17"}, {}, {}])
+        run, _, _ = self.run_supplier(supplier, model)
+        self.assertEqual(run["termination"], "completed")
+        self.assertEqual(run["http_requests"], 4)
+        self.assertEqual(run["tool_calls"], 4)
+        self.assertEqual(run["retries"], 1)
+        self.assertEqual(requests[1]["departureDate"], "2026-09-17")
+        results = run["tool_results"]
+        self.assertEqual([r["attempt"] for r in results], [1, 1, 2, 1])
+        self.assertEqual([r["retry_of"] for r in results], [None, None, results[0]["call_id"], None])
+
+    def test_retry_count_stops_at_actual_tool_budget(self):
+        from travel_agent.agent import Limits
+        requests = []
+        def supplier(request):
+            requests.append(request)
+            raise httpx.ReadTimeout("offline timeout", request=request)
+        run, trace, _ = self.run_supplier(supplier, RequeryModel([{}, {}, {}]),
+                                         limits=Limits(max_tool_calls=2))
+        self.assertEqual(run["termination"], "budget_exceeded")
+        self.assertEqual(run["budget_reason"], "tool_calls")
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(run["http_requests"], 2)
+        self.assertEqual(run["tool_calls"], 2)
+        self.assertEqual(run["retries"], 1)
+        self.assertEqual([r["attempt"] for r in trace["tool_results"]], [1, 2])
+        self.assertTrue(all(r["data"] is None for r in trace["tool_results"]))
+
+    def test_supplier_failure_and_evidence_failure_are_both_preserved(self):
+        def supplier(request):
+            raise httpx.ReadTimeout("test-secret timeout", request=request)
+        with patch.object(Path, "write_text", side_effect=OSError("test-secret disk full")):
+            run, trace, _ = self.run_supplier(supplier, RequeryModel([{}, {}]))
+        self.assertEqual(run["termination"], "completed")
+        self.assertEqual(run["http_requests"], 2)
+        self.assertEqual(run["retries"], 1)
+        self.assertEqual(len(trace["evidence"]), 2)
+        for result in trace["tool_results"]:
+            self.assertEqual(result["status"], "error")
+            self.assertIsNone(result["data"])
+            self.assertEqual(result["error"]["type"], "TransportTimeout")
+            self.assertTrue(result["error"]["retryable"])
+            self.assertEqual(result["evidence_error"]["type"], "EvidenceWriteError")
+        self.assertNotIn("test-secret", json.dumps(trace))
+
+    def test_evidence_directory_failure_preserves_result(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {"TUNIU_API_KEY": "test-secret"}):
+            store = Store(Path(directory) / "trace.sqlite3")
+            (Path(directory) / "evidence").write_text("occupied", encoding="utf-8")
+            run = plan_trip({"id": "directory-error", "request": REQUEST}, TransportModel(),
+                store, tool_mode="real", transport_http=httpx.MockTransport(lambda req: self.response(req, [])))
+            self.assertEqual(run["termination"], "completed")
+            self.assertEqual(run["http_requests"], 1)
+            result = run["tool_results"][0]
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["evidence_error"]["type"], "EvidenceWriteError")
+            self.assertNotIn("source_ref", run["evidence"][0]["supplier_evidence"])

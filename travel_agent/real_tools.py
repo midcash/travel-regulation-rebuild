@@ -2,7 +2,7 @@
 import asyncio
 from pathlib import Path
 from .transport import search_transport
-from .domain import PACKAGE
+from .domain import PACKAGE, fingerprint
 from .regulation_policy import RegulationPolicyError, load_regulation_policy
 from .tools import SCHEMAS, function
 
@@ -25,6 +25,7 @@ class RealTools:
         self.transport_http = transport_http
         self.seen = {}
         self.history = {}
+        self._transport_attempts = {}
         self._data = {"tool_mode": "real"}
 
     def execute(self, name, args, timeout=45):
@@ -34,6 +35,14 @@ class RealTools:
             result, record = asyncio.run(search_transport(args, self.request, call_id,
                 self.evidence_dir, timeout, self.transport_http))
             self.http_requests += result["http_requests"]
+            # Omitted defaults and explicit defaults describe the same query.
+            query_key = fingerprint({"service_class": "any", "max_results": 5, **args})
+            previous = self._transport_attempts.get(query_key)
+            is_retry = (previous is not None and previous["status"] == "error"
+                        and previous["http_requests"] > 0 and result["http_requests"] > 0)
+            result["attempt"] = previous["attempt"] + 1 if is_retry else 1
+            result["retry_of"] = previous["call_id"] if is_retry else None
+            self._transport_attempts[query_key] = result
             for identifier in result["evidence_refs"]:
                 self.seen[identifier] = {"id": identifier, "source": name, "call_id": call_id,
                     "data": result["data"], "supplier_evidence": {k: v for k, v in record.items() if k != "wire_text"}}

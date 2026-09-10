@@ -149,9 +149,17 @@ async def search_transport(args, request, call_id, folder, timeout, transport_ht
     record = redact(record, secrets)
     result = json.loads(dumps(redact(result, secrets)))
     if result["http_requests"]:
-        folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"transport-{call_id.rsplit(':', 1)[-1]}.json"
-        path.write_text(dumps(record) + "\n", encoding="utf-8")
-        record["source_ref"] = str(path)
         result["evidence_refs"] = [record["call_id"]]
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"transport-{call_id.rsplit(':', 1)[-1]}.json"
+            path.write_text(dumps(record) + "\n", encoding="utf-8")
+        except OSError:
+            # Keep the supplier outcome for the Trace; a failed file is not a source.
+            result["evidence_error"] = {"type": "EvidenceWriteError",
+                "message": "供应商原始证据文件保存失败；查询结果及请求计数保留在 Trace 中。", "retryable": False}
+            record["evidence_error"] = result["evidence_error"]
+            result["warnings"].append(result["evidence_error"]["message"])
+        else:
+            record["source_ref"] = str(path)
     return result, record

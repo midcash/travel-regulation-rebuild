@@ -131,6 +131,12 @@ def plan_trip(scenario, provider, store, limits=None, otel=None, evaluation_id=N
                                     attrs["error.type"] = result["error"]["type"]
                                 if name == "search_transport":
                                     attrs["http_requests"] = result["http_requests"]
+                                    attrs["attempt"] = result["attempt"]
+                                    if result["retry_of"] is not None:
+                                        run["retries"] += 1
+                                        attrs["retry_of"] = result["retry_of"]
+                                    if result.get("evidence_error"):
+                                        attrs["evidence_error.type"] = result["evidence_error"]["type"]
                                     if result["data"] is not None:
                                         attrs["query_date"] = result["data"]["departure_date"]
                                         attrs["mode"] = result["data"]["mode"]
