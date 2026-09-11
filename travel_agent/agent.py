@@ -85,6 +85,17 @@ class TripExecution:
         self.pending_call = None
         self.wall_started = time.time()
         self.restored = False
+        self.interactive = False
+        self.before_external = None
+
+    def enable_human_input(self):
+        from .human import HUMAN_SCHEMA
+        self.interactive = True
+        self.schemas = [*self.schemas, HUMAN_SCHEMA]
+        self.prompt += "\n需要用户选择或补充偏好时调用 request_human_input。核心需求固定；人工选择约束后续工具及结果。"
+        self.messages[0]["content"] = self.prompt
+        self.run["prompt_hash"] = fingerprint(self.prompt)
+        self.run["tools_hash"] = fingerprint(self.schemas)
 
     def check_budget(self):
         if time.perf_counter() >= self.deadline:
@@ -98,6 +109,8 @@ class TripExecution:
         self.check_budget()
         with self.tracer.span("policy_decision" if self.provider.name == "baseline" else "chat", step=self.run["model_calls"] + 1) as attrs:
             self.run["model_calls"] += 1
+            if self.before_external:
+                self.before_external("model")
             try:
                 response = self.provider.chat(self.messages, self.schemas,
                                          min(self.limits.model_timeout_s, self.deadline - time.perf_counter()))
@@ -132,6 +145,11 @@ class TripExecution:
                 raise ValueError("Unknown tool")
             attrs["selected_tool"] = name
         self.check_budget()
+        if self.interactive:
+            from .human import validate_messages
+            if "id" not in calls[0]:
+                calls[0]["id"] = f'{self.tracer.trace_id}:model:{self.run["model_calls"]}'
+            validate_messages([*self.messages, message], allow_pending=True)
         self.messages.append(message)
         self.pending_call = {"name": name, "args": args, "call": calls[0]}
         self.stage = "dispatch"
@@ -155,6 +173,8 @@ class TripExecution:
             self.check_budget()
             if self.toolbox.calls >= self.limits.max_tool_calls:
                 raise BudgetExceeded("tool_calls")
+            if self.before_external:
+                self.before_external("tool")
             try:
                 with self.tracer.span("execute_tool", tool=name, attempt=attempt + 1) as attrs:
                     result = (self.toolbox.execute(name, args, timeout=max(0.001, self.deadline - time.perf_counter()))
@@ -187,6 +207,12 @@ class TripExecution:
                     time.sleep(min(self.limits.retry_delay_s, max(0, self.deadline - time.perf_counter())))
                 else:
                     result = {"error": "tool_timeout", "records": []}
+                    if self.tool_mode == "real":
+                        result = {"call_id": f"{self.tracer.trace_id}:tool:{self.toolbox.calls}",
+                            "tool": name, "status": "error", "data": None,
+                            "error": {"type": "ToolTimeout", "message": "工具超时，未生成替代证据。", "retryable": True},
+                            "evidence_refs": [], "warnings": []}
+                        self.toolbox.history[result["call_id"]] = result
             except ValueError:
                 self.run["guardrail_blocks"] += 1
                 raise
@@ -219,6 +245,7 @@ class TripExecution:
             "wall_started": self.wall_started,
             "policy_path": str(self.toolbox.policy_path.resolve()) if self.tool_mode == "real" else None,
             "policy_hash": self.policy_hash(),
+            "interactive": self.interactive,
         })
 
     def policy_hash(self):
@@ -248,6 +275,13 @@ class TripExecution:
         self.tracer.trace_id = run["trace_id"]
         self.schemas = REAL_SCHEMAS if self.tool_mode == "real" else SCHEMAS
         self.prompt = (PACKAGE / "prompts" / ("real_planner.txt" if self.tool_mode == "real" else "planner.txt")).read_text(encoding="utf-8")
+        self.interactive = False
+        self.before_external = None
+        if state.get("interactive"):
+            # enable_human_input updates hashes; compare against saved values below.
+            expected_prompt, expected_tools = run["prompt_hash"], run["tools_hash"]
+            self.enable_human_input()
+            run["prompt_hash"], run["tools_hash"] = expected_prompt, expected_tools
         if fingerprint(self.schemas) != run["tools_hash"] or fingerprint(self.prompt) != run["prompt_hash"]:
             raise ValueError("Incompatible prompt or tool schema")
         if policy_path is not None and str(Path(policy_path).resolve()) != state["policy_path"]:
@@ -280,7 +314,7 @@ class TripExecution:
             if type(getattr(exc, "http_status", None)) is int:
                 self.run["http_status"] = exc.http_status
 
-    def finalize(self):
+    def finalize(self, *, persist=True):
         self.run.update({"status": self.verdict["status"], "verdict": self.verdict,
                     "draft": format_draft(self.verdict), "tool_calls": self.toolbox.calls,
                     "observed_evidence_ids": sorted(self.toolbox.seen),
@@ -292,8 +326,9 @@ class TripExecution:
             self.run["http_requests"] = self.toolbox.http_requests
             self.run["evidence"] = list(self.toolbox.seen.values())
             self.run["tool_results"] = list(self.toolbox.history.values())
-        self.store.save_run(self.run)
-        self.stage = "done"
+        if persist:
+            self.store.save_run(self.run)
+            self.stage = "done"
         return self.run
 
 

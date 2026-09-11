@@ -92,3 +92,13 @@ class LoopContractTests(unittest.TestCase):
         with patch.object(self.store, "save_run", side_effect=save):
             with self.assertRaises(OSError):
                 plan_trip(self.scenario, Baseline(), self.store)
+
+    def test_real_bare_timeout_retains_standard_result_identity(self):
+        def timeout(toolbox, *args, **kwargs):
+            toolbox.calls += 1
+            raise TimeoutError()
+        with patch("travel_agent.agent.RealTools.execute", new=timeout):
+            run = self.run_reply(tool_call("get_policy_snapshot"), tool_mode="real", limits=Limits(max_steps=1, retry_delay_s=0))
+        self.assertEqual((run["termination"], run["budget_reason"], run["tool_calls"]), ("budget_exceeded", "steps", 2))
+        self.assertEqual(run["tool_results"][0]["call_id"], run["trace_id"] + ":tool:2")
+        self.assertEqual(run["tool_results"][0]["status"], "error")
