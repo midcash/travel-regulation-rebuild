@@ -1,5 +1,6 @@
 """Main-chain tools independent of experiments and synthetic datasets."""
 import asyncio
+import copy
 from pathlib import Path
 from .transport import search_transport
 from .domain import PACKAGE, fingerprint
@@ -15,6 +16,17 @@ REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原�
     ["mode", "origin", "destination", "departure_date"]), SCHEMAS[-1]]
 
 class RealTools:
+    STATE_FIELDS = ("calls", "http_requests", "seen", "history", "_transport_attempts", "_data")
+
+    def snapshot(self):
+        return copy.deepcopy({key: getattr(self, key) for key in self.STATE_FIELDS})
+
+    def restore(self, state):
+        if set(state) != set(self.STATE_FIELDS):
+            raise ValueError("Incompatible real tool state")
+        for key in self.STATE_FIELDS:
+            setattr(self, key, copy.deepcopy(state[key]))
+
     def __init__(self, trace_id, policy_path=None, *, request=None, evidence_dir=None, transport_http=None):
         self.policy_path = Path(policy_path) if policy_path is not None else PACKAGE / "policies/浙江省机关工作人员差旅费管理规定.md"
         self.trace_id = trace_id

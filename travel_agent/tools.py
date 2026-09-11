@@ -48,11 +48,22 @@ def demo_records(request, overrides=None):
 
 
 class Tools:
+    STATE_FIELDS = ("_data", "_faults", "seen", "calls")
+
     def __init__(self, scenario, request):
         self._data = demo_records(request, scenario.get("overrides"))
         self._faults = dict(scenario.get("faults", {}))
         self.seen = {}
         self.calls = 0
+
+    def snapshot(self):
+        return copy.deepcopy({key: getattr(self, key) for key in self.STATE_FIELDS})
+
+    def restore(self, state):
+        if set(state) != set(self.STATE_FIELDS):
+            raise ValueError("Incompatible demo tool state")
+        for key in self.STATE_FIELDS:
+            setattr(self, key, copy.deepcopy(state[key]))
 
     def execute(self, name, args):
         self.calls += 1
