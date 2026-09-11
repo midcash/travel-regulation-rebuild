@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 import json
 import copy
 import time
@@ -27,6 +28,19 @@ class BudgetExceeded(Exception):
     def __init__(self, reason):
         self.reason = reason
         super().__init__(reason)
+
+
+def final_fields(verdict, request, tool_mode, tool_results, tool_state, duration_ms):
+    """Pure final projection, also usable after a crash without runtime clients."""
+    fields = {"status": verdict["status"], "verdict": verdict,
+        "draft": format_draft(verdict), "tool_calls": tool_state["calls"],
+        "observed_evidence_ids": sorted(tool_state["seen"]),
+        "observed_tool_names": sorted({r["tool"] for r in tool_results.values()}) if tool_mode == "real" else sorted(tool_results),
+        "duration_ms": round(duration_ms, 3), "finished_at": utcnow()}
+    if tool_mode == "real":
+        fields.update(request=request, http_requests=tool_state["http_requests"],
+            evidence=list(tool_state["seen"].values()), tool_results=list(tool_state["history"].values()))
+    return fields
 
 
 class TripExecution:
@@ -155,7 +169,8 @@ class TripExecution:
         self.stage = "dispatch"
 
     def dispatch(self):
-        self.check_budget()
+        if self.restored:
+            self.check_budget()
         name, args = self.pending_call["name"], self.pending_call["args"]
         if name == "finish":
             with self.tracer.span("validate_result"):
@@ -234,8 +249,13 @@ class TripExecution:
 
     def snapshot(self):
         """Private JSON data only; never expose this through public trace APIs."""
+        base_url = getattr(self.provider, "base_url", None)
+        if base_url is not None:
+            parsed = urlsplit(base_url)
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise ValueError("Provider URL cannot contain credentials or query parameters in a snapshot")
         return copy.deepcopy({
-            "schema_version": 1, "stage": self.stage,
+            "schema_version": 2, "stage": self.stage,
             "scenario": self.scenario, "request": self.request,
             "tool_mode": self.tool_mode, "run": self.run,
             "messages": self.messages, "verdict": self.verdict,
@@ -246,6 +266,7 @@ class TripExecution:
             "policy_path": str(self.toolbox.policy_path.resolve()) if self.tool_mode == "real" else None,
             "policy_hash": self.policy_hash(),
             "interactive": self.interactive,
+            "provider_config": {"base_url": base_url},
         })
 
     def policy_hash(self):
@@ -258,10 +279,12 @@ class TripExecution:
 
     @classmethod
     def restore(cls, state, provider, store, *, otel=None, policy_path=None, transport_http=None):
-        if state.get("schema_version") != 1:
+        if state.get("schema_version") != 2:
             raise ValueError("Incompatible execution snapshot")
         state = copy.deepcopy(state)
         run = state["run"]
+        if getattr(provider, "base_url", None) != state["provider_config"]["base_url"]:
+            raise ValueError("Incompatible provider endpoint")
         if (provider.name, provider.model, getattr(provider, "pricing", None)) != (
                 run["provider"], run["model"], run["pricing_usd_per_million"]):
             raise ValueError("Incompatible provider configuration")
@@ -315,17 +338,9 @@ class TripExecution:
                 self.run["http_status"] = exc.http_status
 
     def finalize(self, *, persist=True):
-        self.run.update({"status": self.verdict["status"], "verdict": self.verdict,
-                    "draft": format_draft(self.verdict), "tool_calls": self.toolbox.calls,
-                    "observed_evidence_ids": sorted(self.toolbox.seen),
-                    "observed_tool_names": sorted({r["tool"] for r in self.tool_results.values()}) if self.tool_mode == "real" else sorted(self.tool_results),
-                    "duration_ms": round(((time.time() - self.wall_started) if self.restored else (time.perf_counter() - self.started)) * 1000, 3),
-                    "finished_at": utcnow()})
-        if self.tool_mode == "real":
-            self.run["request"] = self.request
-            self.run["http_requests"] = self.toolbox.http_requests
-            self.run["evidence"] = list(self.toolbox.seen.values())
-            self.run["tool_results"] = list(self.toolbox.history.values())
+        elapsed = (time.time() - self.wall_started) if self.restored else (time.perf_counter() - self.started)
+        self.run.update(final_fields(self.verdict, self.request, self.tool_mode,
+            self.tool_results, vars(self.toolbox), elapsed * 1000))
         if persist:
             self.store.save_run(self.run)
             self.stage = "done"

@@ -102,3 +102,15 @@ class ExecutionStateTests(unittest.TestCase):
         path.write_text("changed", encoding="utf-8")
         with self.assertRaises(ValueError):
             TripExecution.restore(state, Baseline(), self.store)
+
+    def test_provider_endpoint_cannot_change_or_leak_credentials(self):
+        provider = Baseline()
+        provider.base_url = "http://localhost:11434"
+        execution = TripExecution(self.scenario, provider, self.store)
+        state = execution.snapshot()
+        provider.base_url = "http://localhost:9999"
+        with self.assertRaises(ValueError):
+            TripExecution.restore(state, provider, self.store)
+        provider.base_url = "http://user:secret@localhost:11434"
+        with self.assertRaises(ValueError):
+            execution.snapshot()

@@ -6,6 +6,8 @@ LLM 默认使用原项目相同的真实 DeepSeek 配置；主链路中的公司
 
 ## 本地启动与 PyCharm
 
+主链路已增加可选人工交互：网页勾选“启用人工交互”后，可确认需求、选择已查询候选并补充偏好；等待状态可跨服务重启恢复。默认非交互入口保持原行为。见 [HIL 使用说明](docs/hil-usage.md)与[阶段验收记录](docs/hil-implementation-progress.md)。
+
 当前工作区已建立 `.venv`，已安装项目与可选 OTLP 依赖。直接运行：
 
 ```powershell

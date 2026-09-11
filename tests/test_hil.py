@@ -193,10 +193,18 @@ hil.start_trip(scenario_by_id('hangzhou-shanghai'),Crash(),Store(sys.argv[1]),co
         unfinished = hil.get_trip(waiting["run_id"], self.store)
         self.assertEqual(unfinished["execution_status"], "running")
         self.assertIsNone(unfinished["result"])
-        with patch.object(Baseline, "chat", side_effect=AssertionError("replay")):
-            done = hil.resume_trip(waiting["run_id"], self.store, lambda _: Baseline())
+        def no_provider(_):
+            raise AssertionError("Finalization must not construct a provider")
+        done = hil.resume_trip(waiting["run_id"], self.store, no_provider)
         self.assertEqual(done["execution_status"], "completed")
         self.assertEqual(done["result"]["tool_calls"], 4)
+
+    def test_cancel_does_not_require_provider_credentials(self):
+        waiting = self.start()
+        def no_provider(_):
+            raise AssertionError("Cancellation must not construct a provider")
+        done = hil.cancel_trip(waiting["run_id"], self.store, no_provider, state_version=waiting["state_version"])
+        self.assertEqual(done["execution_status"], "cancelled")
 
     def test_rejected_confirmation_cannot_become_a_planned_result(self):
         done = self.respond(self.start(), {"confirmed": False})

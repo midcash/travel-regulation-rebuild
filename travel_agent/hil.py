@@ -13,7 +13,7 @@ import sqlite3
 import time
 import uuid
 
-from .agent import BudgetExceeded, Limits, TripExecution
+from .agent import BudgetExceeded, TripExecution, final_fields
 from .domain import CHINA, fingerprint, handoff
 from .human import HumanInputError, candidate_question, check_decisions, prepare_question, validate_messages, validate_reply
 
@@ -48,6 +48,8 @@ def _read(store, run_id):
     state = json.loads(row[0])
     if state.get("version") != 1:
         raise HilConflict("Incompatible HIL snapshot")
+    if state.get("result") is None and state["execution"].get("schema_version") != 2:
+        raise HilConflict("Incompatible execution snapshot")
     return state
 
 
@@ -145,25 +147,28 @@ def _wait(state, execution, args, origin):
     execution.stage = "await_human"
 
 
-def _end(state, execution, reason, status):
-    execution.verdict = handoff()
-    execution.run["termination"] = reason
-    execution.stage = "finalize"
+def _end_saved(state, reason, status):
+    execution = state["execution"]
+    execution["verdict"] = handoff()
+    execution["run"]["termination"] = reason
+    execution["stage"] = "finalize"
     state["terminal_status"] = status
     state["execution_status"] = "running"
     state["human_request"] = None
 
 
-def _finish(store, state, execution, owner):
-    execution.finalize(persist=False)
-    state["execution_status"] = state.get("terminal_status", "completed" if execution.run["termination"] == "completed" else "failed")
-    execution.run["active_duration_ms"] = round((time.perf_counter() - execution.started) * 1000, 3)
-    execution.run["waiting_duration_ms"] = round(state["waiting_s"] * 1000, 3)
-    execution.run["human_requests"] = state["human_requests"]
-    execution.run["execution_status"] = state["execution_status"]
-    state["result"] = copy.deepcopy(execution.run)
-    execution.stage = "done"
-    state["execution"] = execution.snapshot()
+def _finish_saved(store, state, owner):
+    execution = state["execution"]
+    run = execution["run"]
+    run.update(final_fields(execution["verdict"], execution["request"], execution["tool_mode"],
+        execution["tool_results"], execution["tool_state"], (time.time() - execution["wall_started"]) * 1000))
+    state["execution_status"] = state.get("terminal_status", "completed" if run["termination"] == "completed" else "failed")
+    run["active_duration_ms"] = round(execution["active_s"] * 1000, 3)
+    run["waiting_duration_ms"] = round(state["waiting_s"] * 1000, 3)
+    run["human_requests"] = state["human_requests"]
+    run["execution_status"] = state["execution_status"]
+    state["result"] = copy.deepcopy(run)
+    execution["stage"] = "done"
     _save(store, state, owner)
     return _envelope(state)
 
@@ -198,27 +203,32 @@ def start_trip(scenario, provider, store, limits=None, *, tool_mode="demo", poli
 
 def _restore(state, store, provider_factory, **runtime):
     config = {key: state["execution"]["run"][key] for key in ("provider", "model", "pricing_usd_per_million")}
+    config.update(state["execution"].get("provider_config", {}))
     return TripExecution.restore(state["execution"], provider_factory(config), store, **runtime)
 
 
 def _drive(state, store, owner, provider_factory, **runtime):
     if state["execution_status"] == "waiting_for_human" and not _expired(state):
         return _envelope(state)
-    execution = _restore(state, store, provider_factory, **runtime)
+    if state["execution"]["stage"] == "finalize":
+        return _finish_saved(store, state, owner)
     if state["inflight"]:
-        execution.run["active_duration_complete"] = False
+        run = state["execution"]["run"]
+        run["active_duration_complete"] = False
         if state["inflight"]["kind"] == "model":
-            execution.run["usage_complete"], execution.run["cost_usd"] = False, None
-        elif execution.tool_mode == "real":
-            execution.run["http_requests_complete"] = False
-        _end(state, execution, "execution_interrupted", "failed")
+            run["usage_complete"], run["cost_usd"] = False, None
+        elif state["execution"]["tool_mode"] == "real":
+            run["http_requests_complete"] = False
+        _end_saved(state, "execution_interrupted", "failed")
     if _expired(state):
         state["waiting_s"] += (now() - datetime.fromisoformat(state["human_request"]["created_at"])).total_seconds()
-        _end(state, execution, "human_expired", "expired")
-    if execution.stage == "finalize":
-        return _finish(store, state, execution, owner)
+        _end_saved(state, "human_expired", "expired")
+    if state["execution"]["stage"] == "finalize":
+        _save(store, state, owner)
+        return _finish_saved(store, state, owner)
     if state["execution_status"] in TERMINAL or state["execution_status"] == "waiting_for_human":
         return _envelope(state)
+    execution = _restore(state, store, provider_factory, **runtime)
 
     def before_external(kind):
         snap = execution.snapshot()
@@ -265,7 +275,8 @@ def _drive(state, store, owner, provider_factory, **runtime):
         state["execution"] = execution.snapshot()
         _save(store, state, owner)
     if execution.stage == "finalize":
-        return _finish(store, state, execution, owner)
+        state["execution"] = execution.snapshot()
+        return _finish_saved(store, state, owner)
     # Include span finalization and orchestration in active time before waiting.
     state["execution"] = execution.snapshot()
     _save(store, state, owner)
@@ -299,14 +310,14 @@ def respond_trip(run_id, store, provider_factory, *, interaction_id, state_versi
                 or state["state_version"] != state_version):
             raise HilConflict("Interaction or version changed")
         reply = validate_reply(question, reply)
-        execution = _restore(state, store, provider_factory, **runtime)
-        required_date = execution.request.get("required_arrival_date", execution.request.get("earliest_departure", "")[:10])
-        if (now() >= datetime.fromisoformat(execution.request["meeting_at"])
+        request = state["execution"]["request"]
+        required_date = request.get("required_arrival_date", request.get("earliest_departure", "")[:10])
+        if (now() >= datetime.fromisoformat(request["meeting_at"])
                 or (required_date and required_date < str(now().astimezone(CHINA).date()))):
-            _end(state, execution, "request_expired", "expired")
-            state["execution"] = execution.snapshot()
+            _end_saved(state, "request_expired", "expired")
             _save(store, state, owner)
-            return _finish(store, state, execution, owner)
+            return _finish_saved(store, state, owner)
+        execution = _restore(state, store, provider_factory, **runtime)
         decision = {"interaction_id": interaction_id, "reply": reply, "accepted_at": now().isoformat()}
         if question["kind"] == "select" and not reply.get("rejected"):
             decision["selected"] = next(x for x in question["options"] if x["option_id"] == reply["option_id"])
@@ -341,9 +352,7 @@ def cancel_trip(run_id, store, provider_factory, *, state_version, **runtime):
             return _drive(state, store, owner, provider_factory, **runtime)
         if state["execution_status"] != "waiting_for_human" or state["state_version"] != state_version:
             raise HilConflict("Only the current waiting interaction can be cancelled")
-        execution = _restore(state, store, provider_factory, **runtime)
         state["waiting_s"] += (now() - datetime.fromisoformat(state["human_request"]["created_at"])).total_seconds()
-        _end(state, execution, "human_cancelled", "cancelled")
-        state["execution"] = execution.snapshot()
+        _end_saved(state, "human_cancelled", "cancelled")
         _save(store, state, owner)
-        return _finish(store, state, execution, owner)
+        return _finish_saved(store, state, owner)

@@ -15,6 +15,8 @@ from .domain import PACKAGE, scenarios, scenario_by_id, custom_scenario
 from .evaluation import evaluate
 from .providers import make_provider
 from .real_tools import REAL_SCHEMAS
+from . import hil
+from .human import HumanInputError
 
 
 class Application:
@@ -24,6 +26,62 @@ class Application:
         self.lock = threading.Lock()
         self.busy = False
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="travel-planning")
+        hil._setup(store)
+
+    def restore_provider(self, config):
+        if (config["provider"], config["model"]) == (self.provider.name, self.provider.model):
+            return self.provider
+        if config["provider"] == "ollama":
+            raise HumanInputError("请用原 Ollama 模型配置重启服务后继续。")
+        return make_provider(config["provider"], model=config["model"], base_url=config.get("base_url"))
+
+    def submit_hil(self, body, action, run_id=None):
+        if action == "start":
+            selected = body.get("provider", self.provider.name)
+            if selected not in {"baseline", "deepseek", "ollama"} or (selected == "ollama" and self.provider.name != "ollama"):
+                raise HumanInputError("Invalid provider")
+            provider = self.provider if selected == self.provider.name else make_provider(selected)
+            mode = body.get("tool_mode", "demo")
+            if mode not in {"demo", "real"} or (mode == "real" and selected == "baseline"):
+                raise HumanInputError("真实工具模式需要真实模型。")
+            scenario = custom_scenario(body["request"]) if "request" in body else scenario_by_id(body.get("scenario", "hangzhou-shanghai"))
+        elif action not in {"respond", "resume", "cancel"}:
+            raise HumanInputError("Invalid HIL action")
+        else:
+            hil.get_trip(run_id, self.store)
+        with self.lock:
+            if self.busy:
+                return None
+            self.busy = True
+            identifier = uuid.uuid4().hex
+            if len(self.jobs) >= 100:
+                self.jobs.pop(next(iter(self.jobs)))
+            job = {"id": identifier, "kind": "hil", "status": "running"}
+            self.jobs[identifier] = job
+
+        def work():
+            try:
+                if action == "start":
+                    result = hil.start_trip(scenario, provider, self.store, tool_mode=mode, otel=self.otel)
+                elif action == "respond":
+                    result = hil.respond_trip(run_id, self.store, self.restore_provider,
+                        interaction_id=body["interaction_id"], state_version=body["state_version"],
+                        response_id=body["response_id"], reply=body["reply"], otel=self.otel)
+                elif action == "cancel":
+                    result = hil.cancel_trip(run_id, self.store, self.restore_provider, state_version=body["state_version"], otel=self.otel)
+                else:
+                    result = hil.resume_trip(run_id, self.store, self.restore_provider, otel=self.otel)
+                update = {"status": "completed", "result_id": result["run_id"], "execution_status": result["execution_status"]}
+            except (HumanInputError, hil.HilConflict) as exc:
+                update = {"status": "failed", "error": str(exc)}
+            except Exception as exc:
+                update = {"status": "failed", "error": type(exc).__name__}
+            finally:
+                with self.lock:
+                    self.jobs[identifier].update(update)
+                    self.busy = False
+        self.executor.submit(work)
+        return dict(job)
 
     def submit(self, body, kind):
         selected = body.get("provider", self.provider.name)
@@ -115,6 +173,13 @@ def make_server(store, provider, port=8766, otel=None):
                     "scenarios": [{"id": x["id"], "label": x["label"], "request": x["request"]} for x in scenarios()]})
             if path == "/api/runs":
                 return self.send(200, store.list_runs())
+            if path.startswith("/api/hil/runs/"):
+                try:
+                    return self.send(200, hil.get_trip(path.rsplit("/", 1)[-1], store))
+                except KeyError:
+                    return self.send(404, {"error": "HIL run not found"})
+                except hil.HilConflict:
+                    return self.send(409, {"error": "Incompatible HIL snapshot"})
             if path.startswith("/api/runs/"):
                 result = store.get_run(path.rsplit("/", 1)[-1])
                 return self.send(200 if result else 404, result or {"error": "Trace not found"})
@@ -134,7 +199,9 @@ def make_server(store, provider, port=8766, otel=None):
                 return self.send(403, {"error": "Same-origin client header required"})
             if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 return self.send(415, {"error": "JSON required"})
-            if self.path not in {"/api/run", "/api/evaluate"}:
+            hil_parts = self.path.strip("/").split("/")
+            is_hil = self.path == "/api/hil/runs" or (len(hil_parts) == 5 and hil_parts[:3] == ["api", "hil", "runs"] and hil_parts[4] in {"respond", "resume", "cancel"})
+            if self.path not in {"/api/run", "/api/evaluate"} and not is_hil:
                 return self.send(404, {"error": "Not found"})
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -143,8 +210,13 @@ def make_server(store, provider, port=8766, otel=None):
                 body = json.loads(self.rfile.read(length))
                 if not isinstance(body, dict):
                     raise ValueError("JSON object required")
-                job = app.submit(body, "run" if self.path == "/api/run" else "eval")
+                if is_hil:
+                    job = app.submit_hil(body, "start" if len(hil_parts) == 3 else hil_parts[4], None if len(hil_parts) == 3 else hil_parts[3])
+                else:
+                    job = app.submit(body, "run" if self.path == "/api/run" else "eval")
                 return self.send(202 if job else 409, job or {"error": "已有任务运行中，请稍后重试。"})
+            except KeyError:
+                return self.send(404, {"error": "Run or required field not found"})
             except (ValueError, TypeError):
                 return self.send(400, {"error": "Invalid options; check scenario, provider, split and repeats"})
 
