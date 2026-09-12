@@ -1,0 +1,367 @@
+{
+  "trace_id": "310c71d36a444aedbfb80a1f70a5720b",
+  "termination": "completed",
+  "status": "needs_review",
+  "model_calls": 8,
+  "http_requests": 12,
+  "retries": 0,
+  "input_tokens": 105373,
+  "output_tokens": 1011,
+  "request": {
+    "origin": "杭州",
+    "destination": "三亚",
+    "meeting_location": "三亚湾红树林国际会议中心",
+    "meeting_at": "2026-09-19T09:00+08:00",
+    "transport_mode": "flight",
+    "arrive_previous_day": true,
+    "required_arrival_date": "2026-09-18",
+    "stay_nights": 1
+  },
+  "verification_limits": {
+    "max_steps": 16,
+    "max_tool_calls": 15,
+    "timeout_s": 360,
+    "max_tokens": 150000
+  },
+  "tools": [
+    {
+      "tool": "get_policy_snapshot",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:1"
+    },
+    {
+      "tool": "search_transport",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:2"
+    },
+    {
+      "tool": "search_stays",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:3"
+    },
+    {
+      "tool": "get_transport_detail",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:4"
+    },
+    {
+      "tool": "resolve_place",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5"
+    },
+    {
+      "tool": "resolve_place",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6"
+    },
+    {
+      "tool": "resolve_place",
+      "status": "ok",
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7"
+    }
+  ],
+  "places": [
+    {
+      "role": "arrival",
+      "city": "三亚",
+      "keyword": "凤凰机场T3",
+      "source_candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:2:candidate:2",
+      "source_address": null,
+      "source_evidence_refs": [
+        "310c71d36a444aedbfb80a1f70a5720b:tool:2:http:1",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:4:http:1"
+      ],
+      "identity_confirmed": false,
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5",
+      "evidence_refs": [
+        "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:1",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:2",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:3"
+      ],
+      "http_requests": 3,
+      "candidates": [
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5:candidate:1",
+          "place_id": "B0K3NLLPZX",
+          "name": "三亚凤凰国际机场T3航站楼",
+          "address": "",
+          "location": "109.403923,18.306647",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false,
+          "geocode": {
+            "formatted_address": "海南省三亚市天涯区三亚凤凰国际机场T3航站楼",
+            "location": "109.403923,18.306647",
+            "level": "兴趣点"
+          },
+          "geocode_evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:3"
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5:candidate:2",
+          "place_id": "B0MB6MN2IN",
+          "name": "三亚凤凰国际机场T3航站楼(国内出发)",
+          "address": "",
+          "location": "109.403508,18.307188",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5:candidate:3",
+          "place_id": "B0MB6MNDA9",
+          "name": "三亚凤凰国际机场T3航站楼(国内到达)",
+          "address": "",
+          "location": "109.403978,18.307232",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5:candidate:4",
+          "place_id": "B0MB6MNDAA",
+          "name": "三亚凤凰国际机场T3航站楼出租车上客区",
+          "address": "鹿城大道与机场路交叉口西360米",
+          "location": "109.402144,18.307018",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:5:candidate:5",
+          "place_id": "B0M6P7M24T",
+          "name": "三亚凤凰国际机场T3航站楼临时停车点(暂停营业)",
+          "address": "鹿城大道与机场路交叉口西北200米",
+          "location": "109.403744,18.309318",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:5:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        }
+      ]
+    },
+    {
+      "role": "hotel",
+      "city": "三亚",
+      "keyword": "三亚国光豪生度假酒店",
+      "source_candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:3:candidate:1",
+      "source_address": "三亚湾路188号",
+      "source_evidence_refs": [
+        "310c71d36a444aedbfb80a1f70a5720b:tool:3:http:1"
+      ],
+      "identity_confirmed": false,
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6",
+      "evidence_refs": [
+        "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:1",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:2",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:3"
+      ],
+      "http_requests": 3,
+      "candidates": [
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6:candidate:1",
+          "place_id": "B038300ZLG",
+          "name": "三亚国光豪生度假酒店",
+          "address": "三亚湾路188号",
+          "location": "109.442153,18.288467",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false,
+          "geocode": {
+            "formatted_address": "海南省三亚市天涯区三亚湾路188号三亚国光豪生度假酒店",
+            "location": "109.442153,18.288467",
+            "level": "兴趣点"
+          },
+          "geocode_evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:3"
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6:candidate:2",
+          "place_id": "B0H0MDJ0DL",
+          "name": "三亚国光豪生度假酒店大堂",
+          "address": "新城东路与海虹路交叉口东南180米",
+          "location": "109.441910,18.290061",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "address_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6:candidate:3",
+          "place_id": "B0FFHJ46HB",
+          "name": "国光豪生沙滩",
+          "address": "三亚湾路三亚国光豪生度假酒店对面",
+          "location": "109.442680,18.286610",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "address_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6:candidate:4",
+          "place_id": "B0383010GI",
+          "name": "三亚国光豪生度假酒店员工公寓",
+          "address": "三亚湾路160号",
+          "location": "109.450602,18.287510",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "address_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:6:candidate:5",
+          "place_id": "B0H1THHAR8",
+          "name": "三亚国光豪生度假酒店停车场",
+          "address": "新城东路与海虹路交叉口东南60米",
+          "location": "109.441304,18.290926",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:6:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "address_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        }
+      ]
+    },
+    {
+      "role": "meeting",
+      "city": "三亚",
+      "keyword": "三亚湾红树林国际会议中心",
+      "source_candidate_id": null,
+      "source_address": null,
+      "source_evidence_refs": [],
+      "identity_confirmed": false,
+      "call_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7",
+      "evidence_refs": [
+        "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:1",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:2",
+        "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:3"
+      ],
+      "http_requests": 3,
+      "candidates": [
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7:candidate:1",
+          "place_id": "B0FFL2KICA",
+          "name": "红树林国际会议中心",
+          "address": "凤凰路155号三亚湾红树林度假世界",
+          "location": "109.490212,18.286220",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false,
+          "geocode": {
+            "formatted_address": "海南省三亚市天涯区凤凰路155号三亚湾红树林红树林国际会议中心",
+            "location": "109.490212,18.286220",
+            "level": "兴趣点"
+          },
+          "geocode_evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:3"
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7:candidate:2",
+          "place_id": "B0LDDDF0Z8",
+          "name": "三亚湾红树林探险王国",
+          "address": "凤凰路155号三亚湾红树林度假世界国际会议中心2楼",
+          "location": "109.490075,18.287175",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7:candidate:3",
+          "place_id": "B03830NT8T",
+          "name": "三亚湾红树林度假世界(菩提酒店)",
+          "address": "三亚湾凤凰路155号",
+          "location": "109.494381,18.283837",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7:candidate:4",
+          "place_id": "B0FFIW1FNX",
+          "name": "三亚湾红树林探险王国童玩中心",
+          "address": "湾凤凰路155号红树林度假世界亚马逊水乐园对面的会议中心2楼",
+          "location": "109.490510,18.285831",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        },
+        {
+          "candidate_id": "310c71d36a444aedbfb80a1f70a5720b:tool:7:candidate:5",
+          "place_id": "B0FFFADVD4",
+          "name": "三亚湾红树林木棉酒店",
+          "address": "凤凰路155号",
+          "location": "109.493466,18.283000",
+          "coordinate_system": "GCJ-02",
+          "evidence_ref": "310c71d36a444aedbfb80a1f70a5720b:tool:7:http:1",
+          "match_confidence": "uncertain",
+          "uncertainty_reasons": [
+            "name_not_exact",
+            "multiple_candidates"
+          ],
+          "identity_confirmed": false
+        }
+      ]
+    }
+  ]
+}
