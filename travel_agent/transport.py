@@ -153,7 +153,7 @@ async def query_transport(mode, operation, arguments, query, tool, call_id,
     except (ValueError, TypeError, UnicodeError, ArithmeticError):
         pass
     if result["status"] == "error":
-        result["error"] = {"type": error_type, "message": "交通查询未取得有效结果；未生成替代数据。", "retryable": retryable}
+        result["error"] = {"type": error_type, "message": "供应商查询未取得有效结果；未生成替代数据。", "retryable": retryable}
         record["error"] = result["error"]
     record["wire_text"] = body.decode("utf-8", errors="replace")
     record["elapsed_seconds"] = round(time.perf_counter() - started, 3)

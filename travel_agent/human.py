@@ -6,7 +6,7 @@ from .tools import function
 
 
 HUMAN_SCHEMA = function("request_human_input",
-    "请求候选选择、确认或偏好补充。选项只能引用已查询的 evidence_id；真实交通候选另给 candidate_id。不得要求修改核心需求。",
+    "请求候选选择、确认或偏好补充。选项只能引用已查询的 evidence_id；真实交通或酒店候选另给 candidate_id。不得要求修改核心需求。",
     {"question": {"type": "string"},
      "kind": {"type": "string", "enum": ["select", "confirm", "preference"]},
      "options": {"type": "array", "items": {"type": "object", "properties": {
@@ -118,17 +118,18 @@ def validate_reply(question, reply):
 
 
 def candidate_question(execution, decisions):
-    """Programmatic ambiguity gate for currently available transport candidates."""
+    """Programmatic ambiguity gate for observed transport and stay candidates."""
     if execution.tool_mode != "real" or not execution.toolbox.history:
         return None
     result = next(reversed(execution.toolbox.history.values()))
-    if result["tool"] != "search_transport" or result["status"] != "ok":
+    if result["tool"] not in {"search_transport", "search_stays"} or result["status"] != "ok":
         return None
     refs = result["evidence_refs"]
     candidates = result["data"]["candidates"]
     if len(candidates) < 2 or not refs or any(d.get("candidate_call_id") == result["call_id"] for d in decisions):
         return None
-    return {"kind": "select", "question": "已查询到多个交通候选，请选择或拒绝这些候选。", "options": [
+    label = "住宿" if result["tool"] == "search_stays" else "交通"
+    return {"kind": "select", "question": f"已查询到多个{label}候选，请选择或拒绝这些候选。", "options": [
         {"option_id": c["candidate_id"], "candidate_id": c["candidate_id"], "evidence_id": refs[0]} for c in candidates]}
 
 
@@ -154,5 +155,7 @@ def check_decisions(pending, decisions, seen):
         if name == "finish" and args.get("status") == "planned":
             if identifier not in args.get("segment_ids", []):
                 raise ValueError("Final plan contradicts confirmed selection")
-        if "candidate_id" in args and args["candidate_id"] != identifier:
+        source = seen.get(selected["evidence_id"], {}).get("source")
+        detail_source = {"get_transport_detail": "search_transport", "get_stay_detail": "search_stays"}.get(name)
+        if "candidate_id" in args and (detail_source is None or source == detail_source) and args["candidate_id"] != identifier:
             raise ValueError("Tool contradicts confirmed candidate")

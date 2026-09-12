@@ -4,6 +4,7 @@ import copy
 from pathlib import Path
 from .transport import search_transport
 from .transport_detail import get_transport_detail
+from .stays import search_stays, get_stay_detail
 from .domain import PACKAGE, fingerprint
 from .regulation_policy import RegulationPolicyError, load_regulation_policy
 from .tools import SCHEMAS, function
@@ -16,7 +17,11 @@ REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原�
     "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
     ["mode", "origin", "destination", "departure_date"]), function("get_transport_detail", "查询本次已观察交通候选的机场、航站楼及席别报价；只传 candidate_id，不改写原候选条件。", {
     "candidate_id": {"type": "string"}, "max_options": {"type": "integer", "minimum": 1, "maximum": 20}},
-    ["candidate_id"]), SCHEMAS[-1]]
+    ["candidate_id"]), function("search_stays", "查询住宿候选；日期是查询条件，默认1成人1间房，未知价格口径不作总价。", {
+    "destination": {"type": "string"}, "check_in": {"type": "string"}, "check_out": {"type": "string"},
+    "meeting_place": {"type": "string"}, "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
+    ["destination", "check_in", "check_out"]), function("get_stay_detail", "查询本次已观察酒店候选的房型报价，沿用原住宿日期及人数。", {
+    "candidate_id": {"type": "string"}}, ["candidate_id"]), SCHEMAS[-1]]
 
 class RealTools:
     STATE_FIELDS = ("calls", "http_requests", "seen", "history", "_transport_attempts", "_data")
@@ -46,14 +51,17 @@ class RealTools:
     def execute(self, name, args, timeout=45):
         self.calls += 1
         call_id = f"{self.trace_id}:tool:{self.calls}"
-        if name in {"search_transport", "get_transport_detail"}:
-            operation = search_transport if name == "search_transport" else get_transport_detail
-            context = self.request if name == "search_transport" else self.history
+        if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail"}:
+            operation = {"search_transport": search_transport, "get_transport_detail": get_transport_detail,
+                         "search_stays": search_stays, "get_stay_detail": get_stay_detail}[name]
+            context = self.request if name in {"search_transport", "search_stays"} else self.history
             result, record = asyncio.run(operation(args, context, call_id,
                 self.evidence_dir, timeout, self.transport_http))
             self.http_requests += result["http_requests"]
             # Omitted defaults and explicit defaults describe the same query.
-            defaults = {"service_class": "any", "max_results": 5} if name == "search_transport" else {"max_options": 20}
+            defaults = {"search_transport": {"service_class": "any", "max_results": 5},
+                        "get_transport_detail": {"max_options": 20}, "search_stays": {"max_results": 5},
+                        "get_stay_detail": {}}[name]
             query_key = fingerprint({"tool": name, **defaults, **args})
             previous = self._transport_attempts.get(query_key)
             is_retry = (previous is not None and previous["status"] == "error"

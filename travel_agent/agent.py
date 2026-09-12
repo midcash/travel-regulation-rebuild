@@ -203,7 +203,7 @@ class TripExecution:
                             attrs["source_ref"] = result["data"]["source_ref"]
                         elif result["status"] == "error":
                             attrs["error.type"] = result["error"]["type"]
-                        if name in {"search_transport", "get_transport_detail"}:
+                        if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail"}:
                             attrs["http_requests"] = result["http_requests"]
                             attrs["attempt"] = result["attempt"]
                             if result["retry_of"] is not None:
@@ -212,8 +212,13 @@ class TripExecution:
                             if result.get("evidence_error"):
                                 attrs["evidence_error.type"] = result["evidence_error"]["type"]
                             if result["data"] is not None:
-                                attrs["query_date"] = result["data"]["departure_date"]
-                                attrs["mode"] = result["data"]["mode"]
+                                if name in {"search_stays", "get_stay_detail"}:
+                                    attrs["check_in"] = result["data"]["check_in"]
+                                    attrs["check_out"] = result["data"]["check_out"]
+                                    attrs["mode"] = "hotel"
+                                else:
+                                    attrs["query_date"] = result["data"]["departure_date"]
+                                    attrs["mode"] = result["data"]["mode"]
                                 attrs["record_count"] = result["data"]["returned_count"]
                 break
             except TimeoutError:
