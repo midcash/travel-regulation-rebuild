@@ -110,7 +110,8 @@ async def resolve_place(args, context, call_id, folder, timeout, transport_http=
         if len(result["data"]) > 1:
             reasons.append("multiple_candidates")
         reasons.extend(source_conflicts)
-        candidates.append({"candidate_id": f"{call_id}:candidate:{index}", "place_id": row.get("id"),
+        candidates.append({"candidate_id": f"{call_id}:candidate:{index}", "role": role,
+            "place_id": row.get("id"),
             "name": name, "address": row.get("address"), "supplier_address": row.get("address"),
             "address_source": "supplier" if isinstance(row.get("address"), str) and row["address"].strip() else None,
             "location": location,

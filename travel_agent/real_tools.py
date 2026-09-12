@@ -6,6 +6,7 @@ from .transport import search_transport
 from .transport_detail import get_transport_detail
 from .stays import search_stays, get_stay_detail
 from .places import resolve_place
+from .route import calculate_route
 from .domain import PACKAGE, fingerprint
 from .regulation_policy import RegulationPolicyError, load_regulation_policy
 from .tools import SCHEMAS, function
@@ -25,7 +26,13 @@ REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原�
     "candidate_id": {"type": "string"}}, ["candidate_id"]), function("resolve_place", "解析本次到达地点、酒店或会场；role必填，arrival/hotel须给已观察candidate_id，会场来自原请求；city/keyword省略时从证据推导，提供时须一致。未经人工确认。", {
     "role": {"type": "string", "enum": ["arrival", "hotel", "meeting"]},
     "candidate_id": {"type": "string"}, "city": {"type": "string"}, "keyword": {"type": "string"},
-    "max_results": {"type": "integer", "minimum": 1, "maximum": 20}}, ["role"]), SCHEMAS[-1]]
+    "max_results": {"type": "integer", "minimum": 1, "maximum": 20}}, ["role"]), function("calculate_route", "使用本次运行已解析地点候选的 GCJ-02 坐标查询驾车路线；只连接到达地点→酒店或酒店→会议地点。耗时是查询时估计，未知费用保持为空。", {
+    "origin_candidate_id": {"type": "string"}, "destination_candidate_id": {"type": "string"},
+    "origin": {"type": "string", "description": "兼容旧调用；必须与已观察地点坐标完全一致"},
+    "destination": {"type": "string", "description": "兼容旧调用；必须与已观察地点坐标完全一致"},
+    "origin_id": {"type": "string"}, "destination_id": {"type": "string"},
+    "max_paths": {"type": "integer", "minimum": 1, "maximum": 10}},
+    []), SCHEMAS[-1]]
 
 class RealTools:
     STATE_FIELDS = ("calls", "http_requests", "seen", "history", "_transport_attempts", "_data")
@@ -55,11 +62,12 @@ class RealTools:
     def execute(self, name, args, timeout=45):
         self.calls += 1
         call_id = f"{self.trace_id}:tool:{self.calls}"
-        if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail", "resolve_place"}:
+        if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail", "resolve_place", "calculate_route"}:
             operation = {"search_transport": search_transport, "get_transport_detail": get_transport_detail,
-                         "search_stays": search_stays, "get_stay_detail": get_stay_detail, "resolve_place": resolve_place}[name]
+                         "search_stays": search_stays, "get_stay_detail": get_stay_detail,
+                         "resolve_place": resolve_place, "calculate_route": calculate_route}[name]
             context = self.request if name in {"search_transport", "search_stays"} else self.history
-            if name == "resolve_place":
+            if name in {"resolve_place", "calculate_route"}:
                 context = (self.request, self.history)
             result, record = asyncio.run(operation(args, context, call_id,
                 self.evidence_dir, timeout, self.transport_http))
@@ -67,7 +75,8 @@ class RealTools:
             # Omitted defaults and explicit defaults describe the same query.
             defaults = {"search_transport": {"service_class": "any", "max_results": 5},
                         "get_transport_detail": {"max_options": 20}, "search_stays": {"max_results": 5},
-                        "get_stay_detail": {}, "resolve_place": {"max_results": 5}}[name]
+                        "get_stay_detail": {}, "resolve_place": {"max_results": 5},
+                        "calculate_route": {"max_paths": 3}}[name]
             query_key = fingerprint({"tool": name, **defaults, **args})
             previous = self._transport_attempts.get(query_key)
             is_retry = (previous is not None and previous["status"] == "error"
@@ -75,9 +84,12 @@ class RealTools:
             result["attempt"] = previous["attempt"] + 1 if is_retry else 1
             result["retry_of"] = previous["call_id"] if is_retry else None
             self._transport_attempts[query_key] = result
+            evidence_records = {item.get("call_id"): item for item in record.get("requests", [])
+                                if isinstance(item, dict)} if isinstance(record, dict) else {}
             for identifier in result["evidence_refs"]:
+                source_record = evidence_records.get(identifier, record)
                 self.seen[identifier] = {"id": identifier, "source": name, "call_id": call_id,
-                    "data": result["data"], "supplier_evidence": {k: v for k, v in record.items() if k != "wire_text"}}
+                    "data": result["data"], "supplier_evidence": {k: v for k, v in source_record.items() if k != "wire_text"}}
             self.history[call_id] = result
             return result
         if name != "get_policy_snapshot" or not isinstance(args, dict) or args:

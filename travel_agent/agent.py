@@ -203,7 +203,7 @@ class TripExecution:
                             attrs["source_ref"] = result["data"]["source_ref"]
                         elif result["status"] == "error":
                             attrs["error.type"] = result["error"]["type"]
-                        if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail", "resolve_place"}:
+                        if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail", "resolve_place", "calculate_route"}:
                             attrs["http_requests"] = result["http_requests"]
                             attrs["attempt"] = result["attempt"]
                             if result["retry_of"] is not None:
@@ -215,6 +215,10 @@ class TripExecution:
                                 if name == "resolve_place":
                                     attrs["place_role"] = result["data"]["role"]
                                     attrs["city"] = result["data"]["city"]
+                                elif name == "calculate_route":
+                                    attrs["origin_role"] = result["data"]["origin"]["role"]
+                                    attrs["destination_role"] = result["data"]["destination"]["role"]
+                                    attrs["duration_basis"] = result["data"]["duration_basis"]
                                 elif name in {"search_stays", "get_stay_detail"}:
                                     attrs["check_in"] = result["data"]["check_in"]
                                     attrs["check_out"] = result["data"]["check_out"]

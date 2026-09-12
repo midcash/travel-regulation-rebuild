@@ -161,3 +161,27 @@ def check_decisions(pending, decisions, seen):
             detail_source = {"arrival": "search_transport", "hotel": "search_stays", "meeting": "request"}.get(args.get("role"))
         if "candidate_id" in args and (detail_source is None or source == detail_source) and args["candidate_id"] != identifier:
             raise ValueError("Tool contradicts confirmed candidate")
+    if name == "calculate_route":
+        # A selected place candidate is application context. If its role is
+        # relevant to this route, both endpoints must use that accepted ID.
+        observed_roles = {}
+        for entry in seen.values():
+            data = entry.get("data")
+            candidates = data.get("candidates", []) if isinstance(data, dict) else []
+            for candidate in candidates:
+                if isinstance(candidate, dict) and isinstance(candidate.get("candidate_id"), str):
+                    observed_roles[candidate["candidate_id"]] = candidate.get("role")
+        accepted_by_role = {}
+        for decision in decisions:
+            selected = decision.get("selected") or {}
+            record = selected.get("record") or {}
+            role = record.get("role")
+            identifier = selected.get("candidate_id")
+            if role and isinstance(identifier, str):
+                accepted_by_role.setdefault(role, set()).add(identifier)
+        for field in ("origin_candidate_id", "destination_candidate_id"):
+            endpoint = args.get(field)
+            role = observed_roles.get(endpoint)
+            accepted = accepted_by_role.get(role, set())
+            if accepted and endpoint not in accepted:
+                raise ValueError("Route contradicts confirmed place candidate")
