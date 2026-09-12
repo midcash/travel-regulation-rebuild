@@ -203,7 +203,7 @@ class TripExecution:
                             attrs["source_ref"] = result["data"]["source_ref"]
                         elif result["status"] == "error":
                             attrs["error.type"] = result["error"]["type"]
-                        if name == "search_transport":
+                        if name in {"search_transport", "get_transport_detail"}:
                             attrs["http_requests"] = result["http_requests"]
                             attrs["attempt"] = result["attempt"]
                             if result["retry_of"] is not None:

@@ -3,6 +3,7 @@ import asyncio
 import copy
 from pathlib import Path
 from .transport import search_transport
+from .transport_detail import get_transport_detail
 from .domain import PACKAGE, fingerprint
 from .regulation_policy import RegulationPolicyError, load_regulation_policy
 from .tools import SCHEMAS, function
@@ -13,7 +14,9 @@ REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原�
     "departure_date": {"type": "string", "description": "YYYY-MM-DD, Asia/Shanghai"},
     "service_class": {"type": "string", "enum": ["any", "high_speed_rail"]},
     "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
-    ["mode", "origin", "destination", "departure_date"]), SCHEMAS[-1]]
+    ["mode", "origin", "destination", "departure_date"]), function("get_transport_detail", "查询本次已观察交通候选的机场、航站楼及席别报价；只传 candidate_id，不改写原候选条件。", {
+    "candidate_id": {"type": "string"}, "max_options": {"type": "integer", "minimum": 1, "maximum": 20}},
+    ["candidate_id"]), SCHEMAS[-1]]
 
 class RealTools:
     STATE_FIELDS = ("calls", "http_requests", "seen", "history", "_transport_attempts", "_data")
@@ -43,12 +46,15 @@ class RealTools:
     def execute(self, name, args, timeout=45):
         self.calls += 1
         call_id = f"{self.trace_id}:tool:{self.calls}"
-        if name == "search_transport":
-            result, record = asyncio.run(search_transport(args, self.request, call_id,
+        if name in {"search_transport", "get_transport_detail"}:
+            operation = search_transport if name == "search_transport" else get_transport_detail
+            context = self.request if name == "search_transport" else self.history
+            result, record = asyncio.run(operation(args, context, call_id,
                 self.evidence_dir, timeout, self.transport_http))
             self.http_requests += result["http_requests"]
             # Omitted defaults and explicit defaults describe the same query.
-            query_key = fingerprint({"service_class": "any", "max_results": 5, **args})
+            defaults = {"service_class": "any", "max_results": 5} if name == "search_transport" else {"max_options": 20}
+            query_key = fingerprint({"tool": name, **defaults, **args})
             previous = self._transport_attempts.get(query_key)
             is_retry = (previous is not None and previous["status"] == "error"
                         and previous["http_requests"] > 0 and result["http_requests"] > 0)

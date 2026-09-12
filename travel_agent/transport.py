@@ -68,12 +68,39 @@ def assess_candidate(candidate, query, request):
 async def search_transport(args, request, call_id, folder, timeout, transport_http=None):
     validate_search(args)
     mode = args["mode"]
+    def summarize(payloads):
+        warnings = []
+        payload = next((p for p in payloads if isinstance(p, dict) and isinstance(p.get("data"), list)), None)
+        if payload is None or any(not isinstance(row, dict) for row in payload["data"]):
+            raise ValueError("Invalid supplier rows")
+        rows = payload["data"]
+        if mode == "train" and args.get("service_class") == "high_speed_rail":
+            rows = [row for row in rows if _is_high_speed(row)]
+            warnings.append("high_speed_rail filtering is applied locally")
+        candidates = []
+        for index, row in enumerate(rows[:args.get("max_results", 5)], 1):
+            candidate = (_flight_summary if mode == "flight" else _train_summary)(row, f"{call_id}:http:1")
+            candidate["supplier_candidate_id"] = candidate["candidate_id"]
+            candidate["candidate_id"] = f"{call_id}:candidate:{index}"
+            assess_candidate(candidate, args, request)
+            candidates.append(candidate)
+        return {**args, "candidates": candidates, "returned_count": len(candidates),
+                "supplier_total_pages": payload.get("totalPageNum")}, warnings
+
+    return await query_transport(mode, SEARCH_NAMES[mode], {
+        "departureCityName": args["origin"], "arrivalCityName": args["destination"],
+        "departureDate": args["departure_date"]}, args, "search_transport", call_id,
+        folder, timeout, transport_http, summarize)
+
+
+async def query_transport(mode, operation, arguments, query, tool, call_id,
+                          folder, timeout, transport_http, summarize):
     key = os.getenv("TUNIU_API_KEY", "").strip()
     endpoint = os.getenv(f"TUNIU_{mode.upper()}_URL", f"https://openapi.tuniu.cn/mcp/{mode}")
-    result = {"tool": "search_transport", "call_id": call_id, "status": "error", "data": None,
+    result = {"tool": tool, "call_id": call_id, "status": "error", "data": None,
               "evidence_refs": [], "warnings": [], "http_requests": 0}
-    record = {"call_id": f"{call_id}:http:1", "operation": SEARCH_NAMES[mode],
-              "query": args, "observed_at": datetime.now(CHINA).isoformat(), "status": "error",
+    record = {"call_id": f"{call_id}:http:1", "operation": operation,
+              "query": query, "observed_at": datetime.now(CHINA).isoformat(), "status": "error",
               "external_text_trust": "untrusted"}
     error_type, retryable = "ConfigurationError", False
     body = bytearray()
@@ -84,8 +111,7 @@ async def search_transport(args, request, call_id, folder, timeout, transport_ht
             raise ValueError("Invalid supplier configuration")
         rpc_id = uuid4().hex
         wire_request = {"jsonrpc": "2.0", "id": rpc_id, "method": "tools/call", "params": {
-            "name": SEARCH_NAMES[mode], "arguments": {"departureCityName": args["origin"],
-            "arrivalCityName": args["destination"], "departureDate": args["departure_date"]}}}
+            "name": operation, "arguments": arguments}}
         error_type = "SupplierResponseError"
         async with asyncio.timeout(min(45, timeout)):
             async with httpx.AsyncClient(transport=transport_http, timeout=min(45, timeout),
@@ -115,22 +141,8 @@ async def search_transport(args, request, call_id, folder, timeout, transport_ht
         payloads = unpack(envelope)
         if any(isinstance(p, dict) and (p.get("success") is False or p.get("successCode") is False) for p in payloads):
             raise ValueError("Supplier business failure")
-        payload = next((p for p in payloads if isinstance(p, dict) and isinstance(p.get("data"), list)), None)
-        if payload is None or any(not isinstance(row, dict) for row in payload["data"]):
-            raise ValueError("Invalid supplier rows")
-        rows = payload["data"]
-        if mode == "train" and args.get("service_class") == "high_speed_rail":
-            rows = [row for row in rows if _is_high_speed(row)]
-            result["warnings"].append("high_speed_rail filtering is applied locally")
-        candidates = []
-        for index, row in enumerate(rows[:args.get("max_results", 5)], 1):
-            candidate = (_flight_summary if mode == "flight" else _train_summary)(row, record["call_id"])
-            candidate["supplier_candidate_id"] = candidate["candidate_id"]
-            candidate["candidate_id"] = f"{call_id}:candidate:{index}"
-            assess_candidate(candidate, args, request)
-            candidates.append(candidate)
-        result.update(status="ok", data={**args, "candidates": candidates,
-            "returned_count": len(candidates), "supplier_total_pages": payload.get("totalPageNum")})
+        data, warnings = summarize(payloads)
+        result.update(status="ok", data=data, warnings=warnings)
         record["status"] = "ok"
     except (TimeoutError, httpx.TimeoutException):
         error_type, retryable = "TransportTimeout", True
@@ -141,7 +153,7 @@ async def search_transport(args, request, call_id, folder, timeout, transport_ht
     except (ValueError, TypeError, UnicodeError, ArithmeticError):
         pass
     if result["status"] == "error":
-        result["error"] = {"type": error_type, "message": "交通查询未取得有效结果；未生成替代候选。", "retryable": retryable}
+        result["error"] = {"type": error_type, "message": "交通查询未取得有效结果；未生成替代数据。", "retryable": retryable}
         record["error"] = result["error"]
     record["wire_text"] = body.decode("utf-8", errors="replace")
     record["elapsed_seconds"] = round(time.perf_counter() - started, 3)
