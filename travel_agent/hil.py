@@ -229,6 +229,7 @@ def _drive(state, store, owner, provider_factory, **runtime):
     if state["execution_status"] in TERMINAL or state["execution_status"] == "waiting_for_human":
         return _envelope(state)
     execution = _restore(state, store, provider_factory, **runtime)
+    execution.human_decisions = state["decisions"]
 
     def before_external(kind):
         snap = execution.snapshot()

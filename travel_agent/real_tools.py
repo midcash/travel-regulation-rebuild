@@ -11,6 +11,17 @@ from .domain import PACKAGE, fingerprint
 from .regulation_policy import RegulationPolicyError, load_regulation_policy
 from .tools import SCHEMAS, function
 
+REAL_FINISH = function("finish", "提交经证据与时间校验的完整真实行程，或说明本次查询资料不足/无可行候选。", {
+    "status": {"type": "string", "enum": ["planned", "unavailable", "needs_review"]},
+    "reason": {"type": "string", "enum": ["feasible", "no_feasible_route", "missing_data"]},
+    "segment_ids": {"type": "array", "items": {"type": "string"}},
+    "evidence_ids": {"type": "array", "items": {"type": "string"}},
+    "planning": {"type": "object", "properties": {
+        "hotel_departure_at": {"type": "string", "description": "ISO 8601 planned hotel departure with timezone"},
+        "arrival_buffer_minutes": {"type": "integer", "minimum": 0, "maximum": 1440}},
+        "required": ["hotel_departure_at", "arrival_buffer_minutes"], "additionalProperties": False}},
+    ["status", "reason", "segment_ids", "evidence_ids"])
+
 REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原文快照及来源哈希；不作合规认证。", {}), function("search_transport", "搜索真实航班或火车；返回供应商时刻、请求约束检查及证据，不代表完整方案。", {
     "mode": {"type": "string", "enum": ["flight", "train"]},
     "origin": {"type": "string"}, "destination": {"type": "string"},
@@ -32,7 +43,7 @@ REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原�
     "destination": {"type": "string", "description": "兼容旧调用；必须与已观察地点坐标完全一致"},
     "origin_id": {"type": "string"}, "destination_id": {"type": "string"},
     "max_paths": {"type": "integer", "minimum": 1, "maximum": 10}},
-    []), SCHEMAS[-1]]
+    []), REAL_FINISH]
 
 class RealTools:
     STATE_FIELDS = ("calls", "http_requests", "seen", "history", "_transport_attempts", "_data")

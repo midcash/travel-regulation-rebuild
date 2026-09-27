@@ -141,19 +141,32 @@ def check_decisions(pending, decisions, seen):
     name, args = pending["name"], pending["args"]
     if not isinstance(args, dict):
         raise ValueError("Invalid tool arguments")
+    used_ids = set(args.get("segment_ids", [])) if name == "finish" else set()
+    if name == "finish":
+        for entry in seen.values():
+            if entry.get("source") != "calculate_route":
+                continue
+            data = entry.get("data")
+            if not isinstance(data, dict):
+                continue
+            if any(isinstance(path, dict) and path.get("route_id") in used_ids
+                   for path in data.get("paths", [])):
+                used_ids.update(identifier for identifier in (
+                    data.get("origin_candidate_id"), data.get("destination_candidate_id"))
+                    if isinstance(identifier, str))
     confirmations = [d["reply"]["confirmed"] for d in decisions if "confirmed" in d.get("reply", {})]
     if name == "finish" and args.get("status") == "planned" and confirmations and confirmations[-1] is False:
         raise ValueError("Plan has not been confirmed after rejection")
     for decision in decisions:
         rejected = {x.get("candidate_id", x["evidence_id"]) for x in decision.get("rejected_options", [])}
-        if (name == "finish" and args.get("status") == "planned" and rejected.intersection(args.get("segment_ids", []))) or args.get("candidate_id") in rejected:
+        if (name == "finish" and args.get("status") == "planned" and rejected.intersection(used_ids)) or args.get("candidate_id") in rejected:
             raise ValueError("Tool or plan uses a rejected candidate")
         selected = decision.get("selected")
         if not selected:
             continue
         identifier = selected.get("candidate_id", selected["evidence_id"])
         if name == "finish" and args.get("status") == "planned":
-            if identifier not in args.get("segment_ids", []):
+            if identifier not in used_ids:
                 raise ValueError("Final plan contradicts confirmed selection")
         source = seen.get(selected["evidence_id"], {}).get("source")
         detail_source = {"get_transport_detail": "search_transport", "get_stay_detail": "search_stays"}.get(name)

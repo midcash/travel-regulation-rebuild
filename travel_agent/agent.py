@@ -33,7 +33,7 @@ class BudgetExceeded(Exception):
 def final_fields(verdict, request, tool_mode, tool_results, tool_state, duration_ms):
     """Pure final projection, also usable after a crash without runtime clients."""
     fields = {"status": verdict["status"], "verdict": verdict,
-        "draft": format_draft(verdict), "tool_calls": tool_state["calls"],
+        "draft": format_draft(verdict, tool_mode), "tool_calls": tool_state["calls"],
         "observed_evidence_ids": sorted(tool_state["seen"]),
         "observed_tool_names": sorted({r["tool"] for r in tool_results.values()}) if tool_mode == "real" else sorted(tool_results),
         "duration_ms": round(duration_ms, 3), "finished_at": utcnow()}
@@ -100,6 +100,7 @@ class TripExecution:
         self.wall_started = time.time()
         self.restored = False
         self.interactive = False
+        self.human_decisions = []
         self.before_external = None
 
     def enable_human_input(self):
@@ -175,7 +176,8 @@ class TripExecution:
         if name == "finish":
             with self.tracer.span("validate_result"):
                 try:
-                    self.verdict = validate_verdict(args, self.toolbox.seen, self.request, self.tool_results, self.tool_mode)
+                    self.verdict = validate_verdict(args, self.toolbox.seen, self.request, self.tool_results,
+                                                    self.tool_mode, decisions=self.human_decisions)
                 except ValueError:
                     self.run["guardrail_blocks"] += 1
                     raise
@@ -311,6 +313,7 @@ class TripExecution:
         self.schemas = REAL_SCHEMAS if self.tool_mode == "real" else SCHEMAS
         self.prompt = (PACKAGE / "prompts" / ("real_planner.txt" if self.tool_mode == "real" else "planner.txt")).read_text(encoding="utf-8")
         self.interactive = False
+        self.human_decisions = []
         self.before_external = None
         if state.get("interactive"):
             # enable_human_input updates hashes; compare against saved values below.
