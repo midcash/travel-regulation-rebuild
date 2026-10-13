@@ -1,6 +1,7 @@
 """Main-chain tools independent of experiments and synthetic datasets."""
 import asyncio
 import copy
+from datetime import date
 from pathlib import Path
 from .transport import search_transport
 from .transport_detail import get_transport_detail
@@ -57,12 +58,13 @@ class RealTools:
         for key in self.STATE_FIELDS:
             setattr(self, key, copy.deepcopy(state[key]))
 
-    def __init__(self, trace_id, policy_path=None, *, request=None, evidence_dir=None, transport_http=None):
+    def __init__(self, trace_id, policy_path=None, *, request=None, current_date=None, evidence_dir=None, transport_http=None):
         self.policy_path = Path(policy_path) if policy_path is not None else PACKAGE / "policies/浙江省机关工作人员差旅费管理规定.md"
         self.trace_id = trace_id
         self.calls = 0
         self.http_requests = 0
         self.request = request
+        self.current_date = current_date
         self.evidence_dir = Path(evidence_dir) if evidence_dir is not None else Path("artifacts") / trace_id
         self.transport_http = transport_http
         self.seen = {}
@@ -74,6 +76,10 @@ class RealTools:
         self.calls += 1
         call_id = f"{self.trace_id}:tool:{self.calls}"
         if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail", "resolve_place", "calculate_route"}:
+            if self.current_date is not None and isinstance(args, dict):
+                date_field = {"search_transport": "departure_date", "search_stays": "check_in"}.get(name)
+                if date_field and date.fromisoformat(args.get(date_field, "")) < self.current_date:
+                    raise ValueError("Requested supplier date is before the captured request date")
             operation = {"search_transport": search_transport, "get_transport_detail": get_transport_detail,
                          "search_stays": search_stays, "get_stay_detail": get_stay_detail,
                          "resolve_place": resolve_place, "calculate_route": calculate_route}[name]

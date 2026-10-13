@@ -9,6 +9,7 @@ const hilEndText={cancelled:'任务已取消。如需修改核心需求，请新
 const hilLabels={running:'规划中',waiting_for_human:'等待回复',completed:'已结束',failed:'执行未完成',cancelled:'已取消',expired:'已过期'};
 const checks = {completed:'执行完成',required_tools:'四类工具均已查询',canonical_records:'记录内容与数据一致',reason:'结果原因正确',status:'状态正确',required_evidence:'四类证据齐全',grounded_citations:'引用真实',itinerary:'行程顺序正确',schedule:'地点与时间衔接',budget:'费用与政策正确',retry_count:'重试次数正确',safe_failure:'失败不编造方案',no_guardrail_violation:'无越界尝试'};
 const date = value => new Date(value).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const runLabel = r => r.request ? `${r.request.origin} → ${r.request.destination} · ${r.request.meeting_at.replace('T',' ')}` : r.scenario;
 const ms = value => value == null ? '—' : value >= 1000 ? `${(value/1000).toFixed(2)} s` : `${Number(value).toFixed(1)} ms`;
 const pct = value => value == null ? '—' : `${(value*100).toFixed(0)}%`;
 const badge = (label,kind='') => `<span class="badge ${kind}">${esc(label)}</span>`;
@@ -42,7 +43,7 @@ function renderRuns(){
   const incomplete=finished.some(r=>!r.usage_complete);
   $('run-metrics').innerHTML=metric('运行数量',runs.length,filter==='all'?'全部执行方式 / 最近 200 条':filter,true)+metric('执行异常率',measured.length?pct(errors/measured.length):'—','不含人工取消、过期和等待')+metric('P95 规划耗时',ms(p95),'交互任务按活跃执行时间统计')+metric('累计 Token',tokens.toLocaleString(),incomplete?'部分调用用量未知，仅展示已知值':'规则基线不消耗模型 Token');
   $('run-count').textContent=`${runs.length} RUNS`;
-  $('run-list').innerHTML=runs.length?runs.map(r=>`<button class="run-item ${state.trace?.trace_id===r.trace_id?'selected':''}" data-trace="${esc(r.trace_id)}"><div class="run-top"><span class="run-name">${esc(r.scenario)}</span>${badge(r.execution_status?hilLabels[r.execution_status]:r.status==='running'?'规划中':r.termination!=='completed'?'执行异常':r.status==='planned'?'已生成':r.status==='unavailable'?'无可行方案':'资料不足',r.status==='running'?'':r.termination!=='completed'?'bad':r.status==='planned'?'good':'warn')}</div><div class="run-meta"><span>${esc(r.provider==='baseline'?'规则基线':r.model)} · ${r.tool_mode==='real'?'真实工具':'演示工具'} ${r.evaluation_id?'· 评测':''}</span><span>${ms(r.duration_ms)}</span></div><div class="run-meta"><span>${date(r.started_at)}</span><span>${esc(r.trace_id.slice(0,8))}</span></div></button>`).join(''):'<div class="empty">尚无运行记录。<br>选择上方场景开始第一次规划。</div>';
+  $('run-list').innerHTML=runs.length?runs.map(r=>`<button class="run-item ${state.trace?.trace_id===r.trace_id?'selected':''}" data-trace="${esc(r.trace_id)}"><div class="run-top"><span class="run-name">${esc(runLabel(r))}</span>${badge(r.execution_status?hilLabels[r.execution_status]:r.status==='running'?'规划中':r.termination!=='completed'?'执行异常':r.status==='planned'?'已生成':r.status==='unavailable'?'无可行方案':'资料不足',r.status==='running'?'':r.termination!=='completed'?'bad':r.status==='planned'?'good':'warn')}</div><div class="run-meta"><span>${esc(r.provider==='baseline'?'规则基线':r.model)} · ${r.tool_mode==='real'?'真实工具':'演示工具'} ${r.evaluation_id?'· 评测':''}</span><span>${ms(r.duration_ms)}</span></div><div class="run-meta"><span>${date(r.started_at)}</span><span>${esc(r.trace_id.slice(0,8))}</span></div></button>`).join(''):'<div class="empty">尚无运行记录。<br>选择上方场景开始第一次规划。</div>';
   $('run-list').querySelectorAll('[data-trace]').forEach(el=>el.onclick=()=>loadTrace(el.dataset.trace).catch(showError));
 }
 let traceLoadVersion=0;
@@ -106,7 +107,7 @@ function renderTrace(){
   const r=state.trace;if(!r)return;
   const spans=r.spans||[];
   $('trace-detail').className='trace-content';
-  $('trace-detail').innerHTML=`<div class="result-heading"><h2 class="trace-title">${esc(r.scenario)}</h2>${badge(r.tool_mode==='real'?'真实工具':'演示工具')} ${badge(r.provider==='baseline'?'规则基线':'真实模型')}</div><div class="mono">TRACE ${esc(r.trace_id)}</div><div class="result-box"><div class="result-heading"><span>${esc(roots[r.verdict?.reason]||'规划进行中')}</span>${badge((r.execution_status?hilLabels[r.execution_status]:labels[r.termination])||'执行中',r.termination&&r.termination!=='completed'?'bad':'good')}</div><p class="itinerary-text">${esc(hilEndText[r.execution_status]||r.draft||'正在收集证据，请稍后刷新。')}</p><div class="evidence">${(r.verdict?.evidence_ids||[]).map(x=>`<span>${esc(x)}</span>`).join('')||'<span>无可引用的行程证据</span>'}</div></div><dl class="detail-stats"><div><dt>总耗时</dt><dd>${ms(r.duration_ms)}</dd></div><div><dt>工具调用 / 重试</dt><dd>${r.tool_calls} / ${r.retries}</dd></div><div><dt>Token 输入 / 输出</dt><dd>${r.input_tokens} / ${r.output_tokens}${r.usage_complete?'':' *'}</dd></div><div><dt>模型费用</dt><dd>${r.cost_usd==null?'未计价':`$${r.cost_usd.toFixed(4)}`}</dd></div></dl>${renderToolResults(r)}<div class="waterfall-head"><h2>执行调用链</h2><small>相对开始时间 · 点击查看属性</small></div><div id="waterfall">${spans.map((s,i)=>`<button class="span-row" data-span="${i}"><span class="span-name ${s.parent_span_id?'child':''}">${s.status==='error'?'! ':''}${esc(s.attributes.tool||s.name)}${s.attributes.attempt?' · '+s.attributes.attempt:''}</span><span class="span-track"><span class="span-bar ${s.status==='error'?'error':''}" data-bar="${i}"></span></span><span class="span-duration">${ms(s.duration_ms)}</span></button>`).join('')}</div><pre id="span-detail" class="span-detail hidden"></pre><div class="metadata">模型 ${esc(r.model)} · 应用 ${esc(r.app_version)} · 终止原因 ${esc(r.termination||'pending')}${r.budget_reason?' · '+esc(r.budget_reason):''}<br>提示词 ${esc(r.prompt_hash.slice(0,16))} · 数据 ${esc(r.dataset_hash.slice(0,16))}<br>遥测保存结构与用量；工具证据及已校验行程作为业务结果保存，不保存模型思维。${r.usage_complete?'':'<br>* 部分模型调用用量未知，不能将已知 Token 视为总用量。'}</div>`;
+  $('trace-detail').innerHTML=`<div class="result-heading"><h2 class="trace-title">${esc(runLabel(r))}</h2>${badge(r.tool_mode==='real'?'真实工具':'演示工具')} ${badge(r.provider==='baseline'?'规则基线':'真实模型')}</div><div class="mono">TRACE ${esc(r.trace_id)}</div><div class="result-box"><div class="result-heading"><span>${esc(roots[r.verdict?.reason]||'规划进行中')}</span>${badge((r.execution_status?hilLabels[r.execution_status]:labels[r.termination])||'执行中',r.termination&&r.termination!=='completed'?'bad':'good')}</div><p class="itinerary-text">${esc(hilEndText[r.execution_status]||r.draft||'正在收集证据，请稍后刷新。')}</p><div class="evidence">${(r.verdict?.evidence_ids||[]).map(x=>`<span>${esc(x)}</span>`).join('')||'<span>无可引用的行程证据</span>'}</div></div><dl class="detail-stats"><div><dt>总耗时</dt><dd>${ms(r.duration_ms)}</dd></div><div><dt>工具调用 / 重试</dt><dd>${r.tool_calls} / ${r.retries}</dd></div><div><dt>Token 输入 / 输出</dt><dd>${r.input_tokens} / ${r.output_tokens}${r.usage_complete?'':' *'}</dd></div><div><dt>模型费用</dt><dd>${r.cost_usd==null?'未计价':`$${r.cost_usd.toFixed(4)}`}</dd></div></dl>${renderToolResults(r)}<div class="waterfall-head"><h2>执行调用链</h2><small>相对开始时间 · 点击查看属性</small></div><div id="waterfall">${spans.map((s,i)=>`<button class="span-row" data-span="${i}"><span class="span-name ${s.parent_span_id?'child':''}">${s.status==='error'?'! ':''}${esc(s.attributes.tool||s.name)}${s.attributes.attempt?' · '+s.attributes.attempt:''}</span><span class="span-track"><span class="span-bar ${s.status==='error'?'error':''}" data-bar="${i}"></span></span><span class="span-duration">${ms(s.duration_ms)}</span></button>`).join('')}</div><pre id="span-detail" class="span-detail hidden"></pre><div class="metadata">模型 ${esc(r.model)} · 应用 ${esc(r.app_version)} · 终止原因 ${esc(r.termination||'pending')}${r.budget_reason?' · '+esc(r.budget_reason):''}<br>${r.request_received_at?`请求按亚洲/上海时间 ${esc(r.request_received_at.replace('T',' '))} 解析<br>`:''}提示词 ${esc(r.prompt_hash.slice(0,16))} · 数据 ${esc(r.dataset_hash.slice(0,16))}<br>遥测保存结构与用量；工具证据及已校验行程作为业务结果保存，不保存模型思维。${r.usage_complete?'':'<br>* 部分模型调用用量未知，不能将已知 Token 视为总用量。'}</div>`;
   const base=Date.parse(r.started_at),total=Math.max(r.duration_ms||1,1);
   document.querySelectorAll('[data-bar]').forEach(el=>{const s=spans[Number(el.dataset.bar)];const left=Math.min(99,Math.max(0,(Date.parse(s.started_at)-base)/total*100));el.style.left=`${left}%`;el.style.width=`${Math.min(100-left,Math.max(.5,s.duration_ms/total*100))}%`;});
   document.querySelectorAll('[data-span]').forEach(el=>el.onclick=()=>{const s=spans[Number(el.dataset.span)];$('span-detail').textContent=JSON.stringify(s,null,2);$('span-detail').classList.remove('hidden');});
@@ -144,7 +145,13 @@ async function launch(kind){
       if(Object.values(body.request).some(v=>!v))throw new Error('请填写完整的城市、地点和会议时间。');
       delete body.scenario;
     }
+    if(kind==='run' && body.scenario==='natural'){
+      body.request_text=$('natural-request').value.trim();
+      if(!body.request_text)throw new Error('请输入会议需求。');
+      delete body.scenario;
+    }
     const job=await api(kind==='run'?($('hil-enabled').checked?'/api/hil/runs':'/api/run'):'/api/evaluate',body);
+    if(job.request_summary)$('scenario-description').textContent=job.request_summary;
     notice(kind==='run'?'规划进行中，正在收集证据…':'评测进行中，每次试验都会保存独立 Trace…');
     let status;
     do{await new Promise(resolve=>setTimeout(resolve,750));status=await api(`/api/jobs/${job.id}`);}while(status.status==='running');
@@ -158,7 +165,7 @@ async function launch(kind){
 async function init(){
   try{
     state.config=await api('/api/config');
-    $('scenario').innerHTML=state.config.scenarios.map(s=>`<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('')+'<option value="custom">自定义会议</option>';
+    $('scenario').innerHTML=state.config.scenarios.map(s=>`<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('')+'<option value="natural">自然语言请求</option><option value="custom">结构化自定义会议</option>';
     if(!state.config.ollama_enabled){for(const id of ['run-provider','eval-provider']){$(id).querySelector('[value="ollama"]').disabled=true;$(id).querySelector('[value="ollama"]').textContent='Ollama · 需启动时启用';}}
     for(const id of ['run-provider','eval-provider']){const option=$(id).querySelector('[value="deepseek"]');option.disabled=!state.config.deepseek_enabled;option.textContent=state.config.deepseek_enabled?`DeepSeek · ${state.config.deepseek_model}`:'DeepSeek · 请配置 .env 后重启';if(state.config.deepseek_enabled)$(id).value='deepseek';}
     updateToolMode();
@@ -180,14 +187,16 @@ function updateToolMode(){
 $('tool-mode').onchange=updateToolMode;
 $('scenario').onchange=()=>{
   const custom=$('scenario').value==='custom';
+  const natural=$('scenario').value==='natural';
   $('request-fields').classList.toggle('hidden',!custom);
+  $('natural-fields').classList.toggle('hidden',!natural);
   const current=state.config.scenarios.find(s=>s.id===$('scenario').value);
   if($('tool-mode').value==='real'){
     const tools=(state.config?.real_tools||[]).join('、');
     $('scenario-description').textContent=`真实工具：${tools||'暂无可用工具'}。模型按需查询；资料不足时正常结束，不代表完整方案可行。${$('run-provider').value?'':'请配置 DeepSeek 或启用 Ollama 后重启服务。'}`;
     return;
   }
-  $('scenario-description').textContent=custom?'模拟数据只覆盖杭州 → 上海东方明珠塔；可修改会议日期与时间。前一晚出发，全部价格与时长仅供演示。':`${current.request.origin} → ${current.request.destination} · ${current.request.meeting_location} · ${current.request.meeting_at.replace('T',' ')}（模拟数据）`;
+  $('scenario-description').textContent=natural?'输入会议日期、会场、出发城市与出行偏好；相对日期按本次提交时的上海时间解析，并先展示解析结果。':custom?'模拟数据只覆盖杭州 → 上海东方明珠塔；可修改会议日期与时间。前一晚出发，全部价格与时长仅供演示。':`${current.request.origin} → ${current.request.destination} · ${current.request.meeting_location} · ${current.request.meeting_at.replace('T',' ')}（模拟数据）`;
 };
 $('refresh').onclick=()=>refresh().catch(showError);$('provider-filter').onchange=renderRuns;
 $('eval-history').onchange=()=>{state.evaluation=$('eval-history').value;renderEvaluation();};$('failures-only').onchange=renderEvaluation;

@@ -462,7 +462,8 @@ def _real_draft(verdict):
         f"约 {_duration_text(arrival_route['duration_seconds'])}，预计 "
         f"{arrival['estimated_arrival_at'][:19].replace('T', ' ')} 到酒店。证据：{', '.join(arrival['evidence_refs'])}",
         f"住宿：{hotel['candidate'].get('name')}（{hotel['candidate'].get('address') or '地址未返回'}），"
-        f"{hotel['check_in']} 至 {hotel['check_out']}，1 晚；具体办理时刻未由查询确认。"
+        f"{hotel['check_in']} 至 {hotel['check_out']}，{hotel.get('adults', 1)} 名成人、"
+        f"{hotel.get('rooms', 1)} 间房，{hotel['nights']} 晚；具体办理时刻未由查询确认。"
         f"证据：{', '.join(hotel['evidence_refs'])}",
         f"次日到会：计划 {meeting['planned_departure_at'][:19].replace('T', ' ')} 离店；路线当前估计 "
         f"{_duration_text(meeting_route['duration_seconds'])}，预计 {meeting['estimated_arrival_at'][:19].replace('T', ' ')} 到达，"

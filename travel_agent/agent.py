@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 import json
@@ -8,7 +9,7 @@ import copy
 import time
 
 from . import __version__
-from .domain import PACKAGE, fingerprint, handoff, validate_verdict, normalize_request, format_draft
+from .domain import CHINA, PACKAGE, fingerprint, handoff, validate_verdict, normalize_request, format_draft
 from .telemetry import Tracer, utcnow
 from .tools import Tools, SCHEMAS
 from .real_tools import RealTools, REAL_SCHEMAS
@@ -58,13 +59,17 @@ class TripExecution:
         limits = limits or Limits()
         tracer = Tracer(store, otel)
         request = normalize_request(scenario["request"], tool_mode)
+        captured_at = scenario.get("request_received_at")
+        current_date = datetime.fromisoformat(captured_at).astimezone(CHINA).date() if captured_at else None
         toolbox = RealTools(tracer.trace_id, policy_path, request=request,
+                            current_date=current_date,
                             evidence_dir=store.path.parent / "evidence" / tracer.trace_id, transport_http=transport_http) if tool_mode == "real" else Tools(scenario, request)
         schemas = REAL_SCHEMAS if tool_mode == "real" else SCHEMAS
         prompt = (PACKAGE / "prompts" / ("real_planner.txt" if tool_mode == "real" else "planner.txt")).read_text(encoding="utf-8")
         started = time.perf_counter()
         deadline = started + limits.timeout_s
         run = {"trace_id": tracer.trace_id, "started_at": utcnow(), "scenario": scenario["id"],
+               "request_received_at": captured_at,
                "provider": provider.name, "model": provider.model, "app_version": __version__,
                "prompt_hash": fingerprint(prompt), "dataset_hash": fingerprint([scenario, toolbox._data]),
                "tools_hash": fingerprint(schemas), "evaluation_id": evaluation_id, "tool_mode": tool_mode,
@@ -324,7 +329,10 @@ class TripExecution:
             raise ValueError("Incompatible prompt or tool schema")
         if policy_path is not None and str(Path(policy_path).resolve()) != state["policy_path"]:
             raise ValueError("Incompatible policy source")
+        captured_at = self.scenario.get("request_received_at")
+        current_date = datetime.fromisoformat(captured_at).astimezone(CHINA).date() if captured_at else None
         self.toolbox = (RealTools(self.tracer.trace_id, state["policy_path"], request=self.request,
+            current_date=current_date,
             evidence_dir=store.path.parent / "evidence" / self.tracer.trace_id,
             transport_http=transport_http) if self.tool_mode == "real" else Tools(self.scenario, self.request))
         if fingerprint([self.scenario, self.toolbox._data]) != run["dataset_hash"]:

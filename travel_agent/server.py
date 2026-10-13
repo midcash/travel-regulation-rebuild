@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -11,22 +12,51 @@ from urllib.parse import urlsplit
 import uuid
 
 from .agent import plan_trip
-from .domain import PACKAGE, scenarios, scenario_by_id, custom_scenario
+from .domain import CHINA, PACKAGE, custom_scenario, normalize_request, scenario_by_id, scenarios
 from .evaluation import evaluate
 from .providers import make_provider
 from .real_tools import REAL_SCHEMAS
 from . import hil
 from .human import HumanInputError
+from .request_parser import RequestInputError, parse_natural_request, validate_request_dates
 
 
 class Application:
-    def __init__(self, store, provider, otel=None):
+    def __init__(self, store, provider, otel=None, *, clock=None):
         self.store, self.provider, self.otel = store, provider, otel
+        self.clock = clock or (lambda: datetime.now(CHINA))
         self.jobs = {}
         self.lock = threading.Lock()
         self.busy = False
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="travel-planning")
         hil._setup(store)
+
+    def prepare_scenario(self, body, tool_mode):
+        if "request_text" in body and "request" in body:
+            raise RequestInputError("请只选择自然语言输入或结构化输入中的一种。")
+        if "request_text" not in body and "request" not in body:
+            return scenario_by_id(body.get("scenario", "hangzhou-shanghai")), None
+
+        captured_at = self.clock()
+        if captured_at.tzinfo is None:
+            captured_at = captured_at.replace(tzinfo=CHINA)
+        else:
+            captured_at = captured_at.astimezone(CHINA)
+        request = (parse_natural_request(body["request_text"], captured_at)
+                   if "request_text" in body else body["request"])
+        scenario = custom_scenario(request)
+        validate_request_dates(scenario["request"], captured_at)
+        scenario["request_received_at"] = captured_at.isoformat(timespec="seconds")
+        normalized = normalize_request(scenario["request"], tool_mode="real")
+        mode = {"flight": "飞机", "train": "火车", "any": "不限"}[normalized.get("transport_mode", "any")]
+        meeting_at = datetime.fromisoformat(normalized["meeting_at"])
+        previous_day = "前一日抵达" if normalized.get("arrive_previous_day", True) else "不要求前一日抵达"
+        nights = normalized.get("stay_nights", 1 if normalized.get("arrive_previous_day", True) else 0)
+        summary = (f"按亚洲/上海时间 {captured_at.isoformat(timespec='minutes')} 解析："
+                   f"{normalized['origin']} → {normalized['destination']} · {normalized['meeting_location']} · "
+                   f"{meeting_at.strftime('%Y-%m-%d %H:%M')} · {mode} · {previous_day} · "
+                   f"住宿 {nights} 晚；暂按 1 人 1 间房。")
+        return scenario, summary
 
     def restore_provider(self, config):
         if (config["provider"], config["model"]) == (self.provider.name, self.provider.model):
@@ -37,14 +67,16 @@ class Application:
 
     def submit_hil(self, body, action, run_id=None):
         if action == "start":
+            mode = body.get("tool_mode", "demo")
+            if mode not in {"demo", "real"}:
+                raise HumanInputError("Invalid tool mode")
+            scenario, request_summary = self.prepare_scenario(body, mode)
             selected = body.get("provider", self.provider.name)
             if selected not in {"baseline", "deepseek", "ollama"} or (selected == "ollama" and self.provider.name != "ollama"):
                 raise HumanInputError("Invalid provider")
-            provider = self.provider if selected == self.provider.name else make_provider(selected)
-            mode = body.get("tool_mode", "demo")
-            if mode not in {"demo", "real"} or (mode == "real" and selected == "baseline"):
+            if mode == "real" and selected == "baseline":
                 raise HumanInputError("真实工具模式需要真实模型。")
-            scenario = custom_scenario(body["request"]) if "request" in body else scenario_by_id(body.get("scenario", "hangzhou-shanghai"))
+            provider = self.provider if selected == self.provider.name else make_provider(selected)
         elif action not in {"respond", "resume", "cancel"}:
             raise HumanInputError("Invalid HIL action")
         else:
@@ -57,6 +89,8 @@ class Application:
             if len(self.jobs) >= 100:
                 self.jobs.pop(next(iter(self.jobs)))
             job = {"id": identifier, "kind": "hil", "status": "running"}
+            if action == "start" and request_summary:
+                job["request_summary"] = request_summary
             self.jobs[identifier] = job
 
         def work():
@@ -85,18 +119,20 @@ class Application:
 
     def submit(self, body, kind):
         selected = body.get("provider", self.provider.name)
+        request_summary = None
+        if kind == "run":
+            tool_mode = body.get("tool_mode", "demo")
+            if tool_mode not in {"demo", "real"}:
+                raise ValueError("Invalid tool mode")
+            scenario, request_summary = self.prepare_scenario(body, tool_mode)
         if selected not in {"baseline", "ollama", "deepseek"}:
             raise ValueError("Invalid provider")
         if selected == "ollama" and self.provider.name != "ollama":
             raise ValueError("Start server with --provider ollama to enable a real model")
         provider = self.provider if selected == self.provider.name else make_provider(selected)
         if kind == "run":
-            tool_mode = body.get("tool_mode", "demo")
             if tool_mode == "real" and selected == "baseline":
                 raise ValueError("真实工具模式需要选择 DeepSeek 或 Ollama 模型")
-            if tool_mode not in {"demo", "real"}:
-                raise ValueError("Invalid tool mode")
-            scenario = custom_scenario(body["request"]) if "request" in body else scenario_by_id(body.get("scenario", "hangzhou-shanghai"))
         else:
             split, repeats = body.get("split", "all"), body.get("repeats", 1)
             if split not in {"all", "dev", "test"} or type(repeats) is not int or not 1 <= repeats <= 3:
@@ -108,7 +144,10 @@ class Application:
             identifier = uuid.uuid4().hex
             if len(self.jobs) >= 100:
                 self.jobs.pop(next(iter(self.jobs)))
-            self.jobs[identifier] = {"id": identifier, "kind": kind, "status": "running"}
+            job = {"id": identifier, "kind": kind, "status": "running"}
+            if request_summary:
+                job["request_summary"] = request_summary
+            self.jobs[identifier] = job
 
         def work():
             try:
@@ -121,11 +160,11 @@ class Application:
                 self.jobs[identifier].update(update)
                 self.busy = False
         self.executor.submit(work)
-        return {"id": identifier, "kind": kind, "status": "running"}
+        return dict(job)
 
 
-def make_server(store, provider, port=8766, otel=None):
-    app = Application(store, provider, otel)
+def make_server(store, provider, port=8766, otel=None, *, clock=None):
+    app = Application(store, provider, otel, clock=clock)
 
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
@@ -217,6 +256,8 @@ def make_server(store, provider, port=8766, otel=None):
                 return self.send(202 if job else 409, job or {"error": "已有任务运行中，请稍后重试。"})
             except KeyError:
                 return self.send(404, {"error": "Run or required field not found"})
+            except RequestInputError as exc:
+                return self.send(400, {"error": str(exc)})
             except (ValueError, TypeError):
                 return self.send(400, {"error": "Invalid options; check scenario, provider, split and repeats"})
 

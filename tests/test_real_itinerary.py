@@ -142,6 +142,7 @@ class RealItineraryTests(unittest.TestCase):
         self.assertIn("2099-09-18 18:55", run["draft"])
         self.assertIn("2099-09-19 08:00", run["draft"])
         self.assertIn("08:15:42", run["draft"])
+        self.assertIn("1 名成人、1 间房", run["draft"])
         self.assertIn("费用未知", run["draft"])
         self.assertIn("杭州", run["draft"])
         for evidence_id in run["verdict"]["required_evidence_ids"]:
