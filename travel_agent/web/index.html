@@ -2,38 +2,46 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Travel Agent · 观测与评测</title>
-  <meta name="description" content="差旅规划 Agent 的运行追踪、证据校验和回归评测工作台。">
+  <title>Travel Agent · 工作台</title>
+  <meta name="description" content="用自然语言发起差旅任务，确认候选并查看行程成果。">
   <link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">T</span><div>TRAVEL AGENT<small>PLANNING LAB</small></div></div>
-    <div class="nav-label">工作空间</div>
+    <div class="brand"><span class="brand-mark">T</span><div>Travel Agent<small>你的差旅工作空间</small></div></div>
+    <button id="new-task" class="new-task">＋ 新建任务</button>
     <nav aria-label="主导航">
-      <button class="nav-button active" data-view="traces"><span>↳</span>运行观测 <small>01</small></button>
+      <button class="nav-button active" data-view="traces">工作台</button>
       <button class="nav-button" data-view="evals"><span>◎</span>回归评测 <small>02</small></button>
-      <button class="nav-button" data-view="flow"><span>⌁</span>全链路 <small>03</small></button>
+      <button class="nav-button" data-view="flow">执行流程</button>
     </nav>
-    <div class="sidebar-bottom"><span class="live-dot"></span> 本地环境 · SQLite<small>演示 / 真实工具可切换<br>模型按需调用 · 证据可追溯</small></div>
+    <div class="history-heading"><span>最近任务</span><span id="run-count"></span></div>
+    <label class="history-filter"><span class="sr-only">筛选执行方式</span><select id="provider-filter"><option value="all">全部任务</option><option value="baseline">规则基线</option><option value="deepseek">DeepSeek</option><option value="ollama">Ollama</option></select></label>
+    <div id="run-list" class="run-list"></div>
+    <div class="sidebar-bottom"><span class="live-dot"></span> 本地工作空间<small>方案供参考，未预订或付款</small></div>
   </aside>
   <main>
     <header class="topbar"><div><span class="breadcrumb">WORKSPACE / </span><span id="section-label">OBSERVABILITY</span></div><div class="top-actions"><span id="connection" class="connection">连接中</span><button id="refresh" class="subtle">刷新数据 ↻</button></div></header>
-    <section class="page-intro"><div><div class="eyebrow" id="eyebrow">FOLLOW THE EVIDENCE</div><h1 id="page-title">每一段行程，都有据可查。</h1><p id="page-subtitle">从会议需求到差旅方案，定位工具异常、观察执行预算、核对证据引用。</p></div><span class="environment-tag">DEVELOPMENT</span></section>
+    <section class="page-intro hidden" id="developer-intro"><div><div class="eyebrow" id="eyebrow">DEVELOPER TOOLS</div><h1 id="page-title">回归评测</h1><p id="page-subtitle">检查结果、证据与执行预算。</p></div></section>
     <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
-    <section id="traces-view">
-      <div class="control-panel"><div class="control-title"><strong>规划差旅</strong><small><span id="tool-mode-note">四类模拟工具 · 默认前一晚出发</span></small></div><label>工具模式<select id="tool-mode"><option value="demo">演示工具</option><option value="real">真实工具</option></select></label><label>业务场景 / 输入方式<select id="scenario"></select></label><label>执行方式<select id="run-provider"><option value="baseline">规则基线 · 无需模型</option><option value="deepseek">DeepSeek · API</option><option value="ollama">Ollama · 真实模型</option></select></label><button id="run" class="primary">生成方案 <span>↗</span></button></div>
+    <section id="traces-view" class="workspace">
+      <section class="conversation-column" aria-label="任务对话">
+        <div class="conversation-heading"><span class="eyebrow">TRAVEL ASSISTANT</span><span class="muted">需求 · 查询 · 确认</span></div>
+        <div id="conversation" class="conversation" aria-live="polite"></div>
+        <section id="hil-panel" class="panel hidden" aria-live="polite"></section>
+        <div class="composer">
       <div id="request-fields" class="request-fields hidden"><label>出发城市<input id="origin" value="杭州" maxlength="120"></label><label>会议城市<input id="destination" value="上海" maxlength="120"></label><label>会议地点<input id="meeting-location" value="东方明珠塔" maxlength="120"></label><label>会议开始时间（北京时间）<input id="meeting-at" type="datetime-local" value="2026-09-12T08:00"></label></div>
-      <div id="natural-fields" class="request-fields hidden"><label>自然语言会议需求<textarea id="natural-request" maxlength="2000" rows="3" placeholder="例如：下周六早上 9 点在三亚湾红树林国际会议中心开会，从杭州出发，提前一晚抵达，乘飞机并住一晚。"></textarea></label></div>
-      <p class="demo-note" id="scenario-description">模拟数据只覆盖杭州 → 上海东方明珠塔；前一晚出发，不含出发地接驳与站内时间。所有价格、班次和时长仅用于演示。</p>
-      <label class="checkbox"><input type="checkbox" id="hil-enabled">启用人工交互：确认需求、选择候选、补充偏好</label>
-      <section id="hil-panel" class="panel hidden" aria-live="polite"></section>
-      <div class="scope-line"><span>最近 200 次运行 · 含评测运行</span><label>筛选 <select id="provider-filter"><option value="all">全部执行方式</option><option value="baseline">规则基线</option><option value="deepseek">DeepSeek</option><option value="ollama">Ollama</option></select></label></div>
-      <div id="run-metrics" class="metrics"></div>
-      <div class="trace-layout">
-        <section class="panel run-list-panel"><div class="panel-heading"><h2>运行记录</h2><span id="run-count" class="muted"></span></div><div id="run-list" class="run-list"></div></section>
-        <section class="panel trace-panel"><div id="trace-detail" class="empty">选择左侧运行记录，查看差旅方案与调用链。</div></section>
+      <div id="natural-fields"><label class="sr-only" for="natural-request">描述差旅需求</label><textarea id="natural-request" maxlength="2000" rows="4" placeholder="告诉我你要去哪开会，何时到达，以及出行和住宿偏好…"></textarea></div>
+      <div class="composer-actions"><details class="task-settings"><summary>任务设置</summary><div class="settings-content"><label>数据来源<select id="tool-mode"><option value="real">真实工具</option><option value="demo">演示工具</option></select></label><label>输入方式<select id="scenario"></select></label><label>执行方式<select id="run-provider"><option value="baseline">规则基线</option><option value="deepseek">DeepSeek · API</option><option value="ollama">Ollama</option></select></label><label class="checkbox"><input type="checkbox" id="hil-enabled" checked>需要时询问我</label><p id="tool-mode-note"></p></div></details><span class="composer-hint">Ctrl / ⌘ + Enter 发送</span><button id="run" class="primary">开始任务 <span aria-hidden="true">↑</span></button></div>
       </div>
+      <p class="composer-note" id="scenario-description">描述城市、会场、会议时间与出行偏好。</p>
+      </section>
+      <aside class="artifact-column" aria-label="任务成果">
+        <div class="artifact-heading"><div><span class="eyebrow">ARTIFACT</span><h2>任务成果</h2></div><span class="artifact-mark" aria-hidden="true">↗</span></div>
+        <div id="candidate-results"></div>
+        <div id="trace-detail" class="empty artifact-empty"><div class="empty-symbol">◇</div><h3>你的行程将在这里展开</h3><p>交通、住宿与到会安排集中呈现。<br>有待确认的候选，也会出现在这里。</p></div>
+        <details class="workspace-metrics"><summary>工作空间用量</summary><div id="run-metrics" class="metrics"></div></details>
+      </aside>
     </section>
     <section id="evals-view" class="hidden">
       <div class="control-panel"><div class="control-title"><strong>执行回归评测</strong><small>独立 oracle · 程序判分</small></div><label>数据分组<select id="eval-split"><option value="all">全部 · 6 个案例</option><option value="dev">开发集 · 3 个案例</option><option value="test">测试集 · 3 个案例</option></select></label><label>执行方式<select id="eval-provider"><option value="baseline">规则基线</option><option value="deepseek">DeepSeek · API</option><option value="ollama">Ollama · 真实模型</option></select></label><label>重复次数<select id="repeats"><option>1</option><option>2</option><option>3</option></select></label><button id="evaluate" class="primary">运行评测 <span>↗</span></button></div>
