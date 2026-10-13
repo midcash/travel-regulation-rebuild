@@ -11,7 +11,7 @@ import urllib.request
 from travel_agent.domain import CHINA, normalize_request
 from travel_agent.providers import tool_call
 from travel_agent.real_tools import RealTools
-from travel_agent.request_parser import parse_natural_request
+from travel_agent.request_parser import RequestInputError, parse_natural_request, validate_request_dates
 from travel_agent.server import make_server
 from travel_agent.telemetry import Store
 
@@ -35,6 +35,12 @@ class MissingDataProvider:
 
 
 class RequestParserTests(unittest.TestCase):
+    def test_naive_structured_meeting_time_is_interpreted_as_china_time(self):
+        request = {"meeting_at": "2030-09-12T16:30", "arrive_previous_day": True}
+
+        with self.assertRaisesRegex(RequestInputError, "早于当前日期"):
+            validate_request_dates(request, TEST_NOW)
+
     def test_resolves_relative_meeting_date_and_preferences_from_fixed_clock(self):
         parsed = parse_natural_request(REQUEST_TEXT, TEST_NOW)
         request = normalize_request(parsed, tool_mode="real")

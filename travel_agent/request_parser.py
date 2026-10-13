@@ -96,7 +96,11 @@ def validate_request_dates(request, captured_at):
         captured_at = captured_at.replace(tzinfo=CHINA)
     else:
         captured_at = captured_at.astimezone(CHINA)
-    meeting_at = datetime.fromisoformat(request["meeting_at"]).astimezone(CHINA)
+    meeting_at = datetime.fromisoformat(request["meeting_at"])
+    if meeting_at.tzinfo is None:
+        meeting_at = meeting_at.replace(tzinfo=CHINA)
+    else:
+        meeting_at = meeting_at.astimezone(CHINA)
     current_date = captured_at.date()
     required_arrival_date = meeting_at.date() - timedelta(days=1) if request.get("arrive_previous_day", True) else meeting_at.date()
     if meeting_at < captured_at or required_arrival_date < current_date:
