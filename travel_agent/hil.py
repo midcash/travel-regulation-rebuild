@@ -174,7 +174,7 @@ def _finish_saved(store, state, owner):
 
 
 def start_trip(scenario, provider, store, limits=None, *, tool_mode="demo", policy_path=None,
-               transport_http=None, otel=None, max_human_requests=3, human_ttl_minutes=1440,
+               transport_http=None, otel=None, max_human_requests=20, human_ttl_minutes=1440,
                confirm_request=True):
     if type(max_human_requests) is not int or not 1 <= max_human_requests <= 20:
         raise HumanInputError("Invalid human request limit")
