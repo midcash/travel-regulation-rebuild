@@ -1,0 +1,1832 @@
+{
+  "date": "2026-10-16",
+  "baseline_commit": "0b1bf2e",
+  "verification_commit": "5e747670d8ef19ea67271923c1b0d36da0e327fa",
+  "model": "deepseek-flash",
+  "reasoning_effort": "low",
+  "sdk": "@earendil-works/pi-coding-agent@1.3.0",
+  "fixed_shanghai_time": "2026-09-10T09:00:00+08:00",
+  "ranges": {
+    "normal": {
+      "runs": 3,
+      "passed_protocol": 3,
+      "model_calls": [
+        4,
+        5
+      ],
+      "tool_calls": [
+        9,
+        10
+      ],
+      "http_requests": [
+        15,
+        15
+      ],
+      "coverage": [
+        0.9,
+        1.0
+      ],
+      "elapsed_seconds": [
+        14.16,
+        15.55
+      ],
+      "total_tokens": [
+        27936,
+        36487
+      ],
+      "input_including_cache": [
+        26330,
+        34827
+      ]
+    },
+    "retry": {
+      "runs": 3,
+      "passed_protocol": 3,
+      "model_calls": [
+        6,
+        7
+      ],
+      "tool_calls": [
+        11,
+        13
+      ],
+      "http_requests": [
+        13,
+        18
+      ],
+      "coverage": [
+        0.8181818181818182,
+        0.9230769230769231
+      ],
+      "elapsed_seconds": [
+        16.52,
+        19.76
+      ],
+      "total_tokens": [
+        35651,
+        47435
+      ],
+      "input_including_cache": [
+        33905,
+        45206
+      ]
+    },
+    "redirect": {
+      "runs": 3,
+      "passed_protocol": 3,
+      "model_calls": [
+        3,
+        3
+      ],
+      "tool_calls": [
+        3,
+        3
+      ],
+      "http_requests": [
+        2,
+        2
+      ],
+      "coverage": [
+        0.6666666666666666,
+        0.6666666666666666
+      ],
+      "elapsed_seconds": [
+        8.09,
+        9.11
+      ],
+      "total_tokens": [
+        10674,
+        10977
+      ],
+      "input_including_cache": [
+        10056,
+        10246
+      ]
+    },
+    "compact_restore": {
+      "runs": 3,
+      "passed_protocol": 3,
+      "model_calls": [
+        7,
+        7
+      ],
+      "tool_calls": [
+        10,
+        10
+      ],
+      "http_requests": [
+        10,
+        15
+      ],
+      "coverage": [
+        0.6,
+        0.9
+      ],
+      "elapsed_seconds": [
+        27.51,
+        29.39
+      ],
+      "total_tokens": [
+        43430,
+        49196
+      ],
+      "input_including_cache": [
+        39980,
+        45570
+      ]
+    }
+  },
+  "runs": [
+    {
+      "scenario": "normal",
+      "trial": 1,
+      "status": "PASS",
+      "model_calls": 4,
+      "completed_requests": 4,
+      "tool_calls": 9,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 0,
+      "coverage": 1.0,
+      "elapsed_seconds": 14.16,
+      "usage": {
+        "input": 9946,
+        "output": 1606,
+        "cacheRead": 16384,
+        "cacheWrite": 0,
+        "totalTokens": 27936
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "normal",
+      "trial": 2,
+      "status": "PASS",
+      "model_calls": 5,
+      "completed_requests": 5,
+      "tool_calls": 9,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 0,
+      "coverage": 1.0,
+      "elapsed_seconds": 15.55,
+      "usage": {
+        "input": 9995,
+        "output": 1660,
+        "cacheRead": 24832,
+        "cacheWrite": 0,
+        "totalTokens": 36487
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "normal",
+      "trial": 3,
+      "status": "PASS",
+      "model_calls": 4,
+      "completed_requests": 4,
+      "tool_calls": 10,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 1,
+      "coverage": 0.9,
+      "elapsed_seconds": 14.33,
+      "usage": {
+        "input": 10110,
+        "output": 1686,
+        "cacheRead": 16384,
+        "cacheWrite": 0,
+        "totalTokens": 28180
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "retry",
+      "trial": 1,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 13,
+      "http_requests": 18,
+      "repeated_matched_queries": 3,
+      "matched": 12,
+      "unmatched": 1,
+      "coverage": 0.9230769230769231,
+      "elapsed_seconds": 18.86,
+      "usage": {
+        "input": 10774,
+        "output": 2229,
+        "cacheRead": 34432,
+        "cacheWrite": 0,
+        "totalTokens": 47435
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "retry",
+      "trial": 2,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 13,
+      "http_requests": 18,
+      "repeated_matched_queries": 3,
+      "matched": 12,
+      "unmatched": 1,
+      "coverage": 0.9230769230769231,
+      "elapsed_seconds": 19.76,
+      "usage": {
+        "input": 10753,
+        "output": 2103,
+        "cacheRead": 32640,
+        "cacheWrite": 0,
+        "totalTokens": 45496
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "retry",
+      "trial": 3,
+      "status": "PASS",
+      "model_calls": 6,
+      "completed_requests": 6,
+      "tool_calls": 11,
+      "http_requests": 13,
+      "repeated_matched_queries": 3,
+      "matched": 9,
+      "unmatched": 2,
+      "coverage": 0.8181818181818182,
+      "elapsed_seconds": 16.52,
+      "usage": {
+        "input": 8945,
+        "output": 1746,
+        "cacheRead": 24960,
+        "cacheWrite": 0,
+        "totalTokens": 35651
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "redirect",
+      "trial": 1,
+      "status": "PASS",
+      "model_calls": 3,
+      "completed_requests": 3,
+      "tool_calls": 3,
+      "http_requests": 2,
+      "repeated_matched_queries": 0,
+      "matched": 2,
+      "unmatched": 1,
+      "coverage": 0.6666666666666666,
+      "elapsed_seconds": 8.09,
+      "usage": {
+        "input": 4187,
+        "output": 599,
+        "cacheRead": 5888,
+        "cacheWrite": 0,
+        "totalTokens": 10674
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "flights",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "redirect",
+      "trial": 2,
+      "status": "PASS",
+      "model_calls": 3,
+      "completed_requests": 3,
+      "tool_calls": 3,
+      "http_requests": 2,
+      "repeated_matched_queries": 0,
+      "matched": 2,
+      "unmatched": 1,
+      "coverage": 0.6666666666666666,
+      "elapsed_seconds": 8.51,
+      "usage": {
+        "input": 4168,
+        "output": 663,
+        "cacheRead": 5888,
+        "cacheWrite": 0,
+        "totalTokens": 10719
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "flights",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "redirect",
+      "trial": 3,
+      "status": "PASS",
+      "model_calls": 3,
+      "completed_requests": 3,
+      "tool_calls": 3,
+      "http_requests": 2,
+      "repeated_matched_queries": 0,
+      "matched": 2,
+      "unmatched": 1,
+      "coverage": 0.6666666666666666,
+      "elapsed_seconds": 9.11,
+      "usage": {
+        "input": 4102,
+        "output": 731,
+        "cacheRead": 6144,
+        "cacheWrite": 0,
+        "totalTokens": 10977
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "flights",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "compact_restore",
+      "trial": 1,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 10,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 1,
+      "coverage": 0.9,
+      "elapsed_seconds": 28.17,
+      "usage": {
+        "input": 19303,
+        "output": 3395,
+        "cacheRead": 25728,
+        "cacheWrite": 0,
+        "totalTokens": 48426
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "compact_restore",
+      "trial": 2,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 10,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 1,
+      "coverage": 0.9,
+      "elapsed_seconds": 29.39,
+      "usage": {
+        "input": 18050,
+        "output": 3626,
+        "cacheRead": 27520,
+        "cacheWrite": 0,
+        "totalTokens": 49196
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "compact_restore",
+      "trial": 3,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 10,
+      "http_requests": 10,
+      "repeated_matched_queries": 0,
+      "matched": 6,
+      "unmatched": 4,
+      "coverage": 0.6,
+      "elapsed_seconds": 27.51,
+      "usage": {
+        "input": 14892,
+        "output": 3450,
+        "cacheRead": 25088,
+        "cacheWrite": 0,
+        "totalTokens": 43430
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    }
+  ],
+  "superseded_debug_cohorts_not_for_budget": {
+    "replay-pilot.json": [
+      {
+        "scenario": "normal",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 5,
+        "completed_requests": 5,
+        "tool_calls": 10,
+        "matched": 9,
+        "unmatched": 1,
+        "coverage": 0.9,
+        "elapsed_seconds": 16.91,
+        "usage": {
+          "input": 9764,
+          "output": 1843,
+          "cacheRead": 24960,
+          "cacheWrite": 0,
+          "totalTokens": 36567
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "normal",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 4,
+        "completed_requests": 4,
+        "tool_calls": 7,
+        "matched": 3,
+        "unmatched": 4,
+        "coverage": 0.42857142857142855,
+        "elapsed_seconds": 20.0,
+        "usage": {
+          "input": 4981,
+          "output": 2386,
+          "cacheRead": 12288,
+          "cacheWrite": 0,
+          "totalTokens": 19655
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "normal",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 4,
+        "completed_requests": 4,
+        "tool_calls": 10,
+        "matched": 9,
+        "unmatched": 1,
+        "coverage": 0.9,
+        "elapsed_seconds": 17.47,
+        "usage": {
+          "input": 9677,
+          "output": 1917,
+          "cacheRead": 17152,
+          "cacheWrite": 0,
+          "totalTokens": 28746
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "retry",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 12,
+        "matched": 12,
+        "unmatched": 0,
+        "coverage": 1.0,
+        "elapsed_seconds": 20.08,
+        "usage": {
+          "input": 9955,
+          "output": 1943,
+          "cacheRead": 31872,
+          "cacheWrite": 0,
+          "totalTokens": 43770
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "retry",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 8,
+        "completed_requests": 8,
+        "tool_calls": 16,
+        "matched": 9,
+        "unmatched": 7,
+        "coverage": 0.5625,
+        "elapsed_seconds": 24.67,
+        "usage": {
+          "input": 9086,
+          "output": 2644,
+          "cacheRead": 40448,
+          "cacheWrite": 0,
+          "totalTokens": 52178
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "retry",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 13,
+        "matched": 11,
+        "unmatched": 2,
+        "coverage": 0.8461538461538461,
+        "elapsed_seconds": 23.75,
+        "usage": {
+          "input": 7982,
+          "output": 2618,
+          "cacheRead": 29056,
+          "cacheWrite": 0,
+          "totalTokens": 39656
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 3,
+        "matched": 1,
+        "unmatched": 1,
+        "coverage": 0.5,
+        "elapsed_seconds": 8.67,
+        "usage": {
+          "input": 2948,
+          "output": 620,
+          "cacheRead": 4608,
+          "cacheWrite": 0,
+          "totalTokens": 8176
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 4,
+        "matched": 1,
+        "unmatched": 1,
+        "coverage": 0.5,
+        "elapsed_seconds": 9.75,
+        "usage": {
+          "input": 2847,
+          "output": 740,
+          "cacheRead": 4864,
+          "cacheWrite": 0,
+          "totalTokens": 8451
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 3,
+        "matched": 1,
+        "unmatched": 1,
+        "coverage": 0.5,
+        "elapsed_seconds": 9.72,
+        "usage": {
+          "input": 2979,
+          "output": 821,
+          "cacheRead": 4608,
+          "cacheWrite": 0,
+          "totalTokens": 8408
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 6,
+        "completed_requests": 6,
+        "tool_calls": 9,
+        "matched": 9,
+        "unmatched": 0,
+        "coverage": 1.0,
+        "elapsed_seconds": 34.75,
+        "usage": {
+          "input": 18534,
+          "output": 4548,
+          "cacheRead": 15872,
+          "cacheWrite": 0,
+          "totalTokens": 38954
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 10,
+        "matched": 9,
+        "unmatched": 1,
+        "coverage": 0.9,
+        "elapsed_seconds": 27.75,
+        "usage": {
+          "input": 16851,
+          "output": 2839,
+          "cacheRead": 25728,
+          "cacheWrite": 0,
+          "totalTokens": 45418
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 6,
+        "completed_requests": 6,
+        "tool_calls": 7,
+        "matched": 4,
+        "unmatched": 3,
+        "coverage": 0.5714285714285714,
+        "elapsed_seconds": 30.89,
+        "usage": {
+          "input": 10405,
+          "output": 3576,
+          "cacheRead": 14336,
+          "cacheWrite": 0,
+          "totalTokens": 28317
+        },
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flight_detail",
+          "flights",
+          "meeting",
+          "stays"
+        ]
+      }
+    ],
+    "replay-pre-review.json": [
+      {
+        "scenario": "normal",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 4,
+        "completed_requests": 4,
+        "tool_calls": 10,
+        "http_requests": 10,
+        "repeated_matched_queries": 0,
+        "matched": 6,
+        "unmatched": 4,
+        "coverage": 0.6,
+        "elapsed_seconds": 20.56,
+        "usage": {
+          "input": 8583,
+          "output": 2596,
+          "cacheRead": 16128,
+          "cacheWrite": 0,
+          "totalTokens": 27307
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "normal",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 4,
+        "completed_requests": 4,
+        "tool_calls": 10,
+        "http_requests": 15,
+        "repeated_matched_queries": 0,
+        "matched": 9,
+        "unmatched": 1,
+        "coverage": 0.9,
+        "elapsed_seconds": 17.26,
+        "usage": {
+          "input": 10026,
+          "output": 1917,
+          "cacheRead": 17792,
+          "cacheWrite": 0,
+          "totalTokens": 29735
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "normal",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 5,
+        "completed_requests": 5,
+        "tool_calls": 11,
+        "http_requests": 15,
+        "repeated_matched_queries": 0,
+        "matched": 9,
+        "unmatched": 2,
+        "coverage": 0.8181818181818182,
+        "elapsed_seconds": 19.25,
+        "usage": {
+          "input": 10281,
+          "output": 2214,
+          "cacheRead": 25856,
+          "cacheWrite": 0,
+          "totalTokens": 38351
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "retry",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 5,
+        "completed_requests": 5,
+        "tool_calls": 10,
+        "http_requests": 12,
+        "repeated_matched_queries": 3,
+        "matched": 8,
+        "unmatched": 2,
+        "coverage": 0.8,
+        "elapsed_seconds": 18.09,
+        "usage": {
+          "input": 6438,
+          "output": 1922,
+          "cacheRead": 12544,
+          "cacheWrite": 0,
+          "totalTokens": 20904
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "flight_detail",
+          "flights",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "retry",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 6,
+        "completed_requests": 6,
+        "tool_calls": 15,
+        "http_requests": 18,
+        "repeated_matched_queries": 3,
+        "matched": 12,
+        "unmatched": 3,
+        "coverage": 0.8,
+        "elapsed_seconds": 18.05,
+        "usage": {
+          "input": 10922,
+          "output": 1974,
+          "cacheRead": 23424,
+          "cacheWrite": 0,
+          "totalTokens": 36320
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "retry",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 13,
+        "http_requests": 18,
+        "repeated_matched_queries": 3,
+        "matched": 12,
+        "unmatched": 1,
+        "coverage": 0.9230769230769231,
+        "elapsed_seconds": 20.06,
+        "usage": {
+          "input": 10711,
+          "output": 2116,
+          "cacheRead": 33664,
+          "cacheWrite": 0,
+          "totalTokens": 46491
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 3,
+        "http_requests": 1,
+        "repeated_matched_queries": 0,
+        "matched": 1,
+        "unmatched": 1,
+        "coverage": 0.5,
+        "elapsed_seconds": 9.06,
+        "usage": {
+          "input": 2943,
+          "output": 761,
+          "cacheRead": 4864,
+          "cacheWrite": 0,
+          "totalTokens": 8568
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 3,
+        "http_requests": 1,
+        "repeated_matched_queries": 0,
+        "matched": 1,
+        "unmatched": 1,
+        "coverage": 0.5,
+        "elapsed_seconds": 8.61,
+        "usage": {
+          "input": 2949,
+          "output": 699,
+          "cacheRead": 4864,
+          "cacheWrite": 0,
+          "totalTokens": 8512
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 3,
+        "http_requests": 1,
+        "repeated_matched_queries": 0,
+        "matched": 1,
+        "unmatched": 1,
+        "coverage": 0.5,
+        "elapsed_seconds": 8.75,
+        "usage": {
+          "input": 2906,
+          "output": 684,
+          "cacheRead": 4864,
+          "cacheWrite": 0,
+          "totalTokens": 8454
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 10,
+        "http_requests": 11,
+        "repeated_matched_queries": 0,
+        "matched": 7,
+        "unmatched": 3,
+        "coverage": 0.7,
+        "elapsed_seconds": 31.31,
+        "usage": {
+          "input": 17912,
+          "output": 3513,
+          "cacheRead": 21248,
+          "cacheWrite": 0,
+          "totalTokens": 42673
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 2,
+        "status": "FAIL",
+        "model_calls": 5,
+        "completed_requests": 5,
+        "tool_calls": 9,
+        "http_requests": 15,
+        "repeated_matched_queries": 0,
+        "matched": 9,
+        "unmatched": 0,
+        "coverage": 1.0,
+        "elapsed_seconds": 37.5,
+        "usage": {
+          "input": 14190,
+          "output": 5671,
+          "cacheRead": 18944,
+          "cacheWrite": 0,
+          "totalTokens": 38805
+        },
+        "usage_complete": true,
+        "error": "Turn prefix summarization failed: generation hit the token cap and the summary is incomplete"
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 10,
+        "http_requests": 15,
+        "repeated_matched_queries": 0,
+        "matched": 9,
+        "unmatched": 1,
+        "coverage": 0.9,
+        "elapsed_seconds": 28.34,
+        "usage": {
+          "input": 18584,
+          "output": 3037,
+          "cacheRead": 26112,
+          "cacheWrite": 0,
+          "totalTokens": 47733
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      }
+    ],
+    "replay-redirect.json": [
+      {
+        "scenario": "redirect",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 4,
+        "http_requests": 5,
+        "repeated_matched_queries": 0,
+        "matched": 3,
+        "unmatched": 1,
+        "coverage": 0.75,
+        "elapsed_seconds": 33.06,
+        "usage": {
+          "input": 4746,
+          "output": 678,
+          "cacheRead": 6656,
+          "cacheWrite": 0,
+          "totalTokens": 12080
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 4,
+        "completed_requests": 4,
+        "tool_calls": 4,
+        "http_requests": 2,
+        "repeated_matched_queries": 0,
+        "matched": 2,
+        "unmatched": 2,
+        "coverage": 0.5,
+        "elapsed_seconds": 11.47,
+        "usage": {
+          "input": 4349,
+          "output": 1027,
+          "cacheRead": 10752,
+          "cacheWrite": 0,
+          "totalTokens": 16128
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "redirect",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 3,
+        "completed_requests": 3,
+        "tool_calls": 3,
+        "http_requests": 2,
+        "repeated_matched_queries": 0,
+        "matched": 2,
+        "unmatched": 1,
+        "coverage": 0.6666666666666666,
+        "elapsed_seconds": 8.95,
+        "usage": {
+          "input": 4181,
+          "output": 620,
+          "cacheRead": 5888,
+          "cacheWrite": 0,
+          "totalTokens": 10689
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "stays"
+        ]
+      }
+    ],
+    "replay-compact-before-oracle.json": [
+      {
+        "scenario": "compact_restore",
+        "trial": 1,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 11,
+        "http_requests": 15,
+        "repeated_matched_queries": 0,
+        "matched": 9,
+        "unmatched": 2,
+        "coverage": 0.8181818181818182,
+        "elapsed_seconds": 29.61,
+        "usage": {
+          "input": 18129,
+          "output": 3775,
+          "cacheRead": 26752,
+          "cacheWrite": 0,
+          "totalTokens": 48656
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 2,
+        "status": "PASS",
+        "model_calls": 6,
+        "completed_requests": 6,
+        "tool_calls": 9,
+        "http_requests": 15,
+        "repeated_matched_queries": 0,
+        "matched": 9,
+        "unmatched": 0,
+        "coverage": 1.0,
+        "elapsed_seconds": 32.36,
+        "usage": {
+          "input": 17411,
+          "output": 4615,
+          "cacheRead": 17664,
+          "cacheWrite": 0,
+          "totalTokens": 39690
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "airport",
+          "airport_hotel",
+          "flight_detail",
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      },
+      {
+        "scenario": "compact_restore",
+        "trial": 3,
+        "status": "PASS",
+        "model_calls": 7,
+        "completed_requests": 7,
+        "tool_calls": 11,
+        "http_requests": 10,
+        "repeated_matched_queries": 0,
+        "matched": 6,
+        "unmatched": 5,
+        "coverage": 0.5454545454545454,
+        "elapsed_seconds": 34.22,
+        "usage": {
+          "input": 17124,
+          "output": 4578,
+          "cacheRead": 24576,
+          "cacheWrite": 0,
+          "totalTokens": 46278
+        },
+        "usage_complete": true,
+        "ended_normally": true,
+        "observed_fixtures": [
+          "flights",
+          "hotel_detail",
+          "hotel_meeting",
+          "hotel_place",
+          "meeting",
+          "stays"
+        ]
+      }
+    ]
+  },
+  "pre_structured_restore_oracle_runs": [
+    {
+      "scenario": "compact_restore",
+      "trial": 1,
+      "status": "PASS",
+      "model_calls": 5,
+      "completed_requests": 5,
+      "tool_calls": 7,
+      "http_requests": 5,
+      "repeated_matched_queries": 0,
+      "matched": 3,
+      "unmatched": 4,
+      "coverage": 0.42857142857142855,
+      "elapsed_seconds": 38.55,
+      "usage": {
+        "input": 8554,
+        "output": 5928,
+        "cacheRead": 9600,
+        "cacheWrite": 0,
+        "totalTokens": 24082
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "flights",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "compact_restore",
+      "trial": 2,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 10,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 1,
+      "coverage": 0.9,
+      "elapsed_seconds": 29.47,
+      "usage": {
+        "input": 17772,
+        "output": 4048,
+        "cacheRead": 26496,
+        "cacheWrite": 0,
+        "totalTokens": 48316
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    },
+    {
+      "scenario": "compact_restore",
+      "trial": 3,
+      "status": "PASS",
+      "model_calls": 7,
+      "completed_requests": 7,
+      "tool_calls": 11,
+      "http_requests": 15,
+      "repeated_matched_queries": 0,
+      "matched": 9,
+      "unmatched": 2,
+      "coverage": 0.8181818181818182,
+      "elapsed_seconds": 30.48,
+      "usage": {
+        "input": 18037,
+        "output": 4053,
+        "cacheRead": 26880,
+        "cacheWrite": 0,
+        "totalTokens": 48970
+      },
+      "usage_complete": true,
+      "ended_normally": true,
+      "observed_fixtures": [
+        "airport",
+        "airport_hotel",
+        "flight_detail",
+        "flights",
+        "hotel_detail",
+        "hotel_meeting",
+        "hotel_place",
+        "meeting",
+        "stays"
+      ]
+    }
+  ],
+  "exclusion_reason": "Debug cohorts include parallel-request undercount, unobserved-candidate access, and weak restore assertions. Final full rerun fixes these; final compact rerun independently asserts structured selection/evidence and zero new queries. Earlier cap failure remains recorded.",
+  "offline": {
+    "status": "PASS",
+    "elapsed_seconds": 12.66,
+    "idle_button_no_model": true,
+    "idle_selection_injected_at_next_turn": true,
+    "resource_isolation": {
+      "audited_accesses": 1478,
+      "forbidden_attempts": 0,
+      "negative_rejected": 2
+    },
+    "deterministic_pi_baseline": {
+      "model_calls": 4,
+      "completed_requests": 4,
+      "tool_calls": 1,
+      "text_deltas": 2,
+      "thinking_deltas": 0,
+      "thinking_chars": 0,
+      "usage": {
+        "input": 998,
+        "output": 31,
+        "cacheRead": 276,
+        "cacheWrite": 603,
+        "totalTokens": 1908
+      },
+      "usage_observed": true,
+      "usage_complete": true,
+      "raw_usage": [],
+      "response_models": [],
+      "errors": []
+    },
+    "sqlite_memory_restore": {
+      "messages": 6,
+      "session_file": false,
+      "compaction_preserved": true
+    },
+    "commit_before_delivery_and_unknown": true,
+    "additive_tables_legacy_read": true,
+    "rollback_original_hil_reads_waiting_task": {
+      "source_commit": "0b7364f",
+      "unchanged_old_rows": true
+    },
+    "windows_active_tool_kill_and_restart": {
+      "unknown_preserved": true,
+      "no_automatic_model_call": true,
+      "continue_uses_new_query_id": true
+    },
+    "windows_graceful": 0,
+    "windows_kill": 1,
+    "windows_crash": 17
+  },
+  "live": {
+    "status": "PASS",
+    "configuration": {
+      "model": "deepseek-flash",
+      "reasoning": true,
+      "toolNames": [
+        "lookup"
+      ],
+      "restoredMessages": 0
+    },
+    "tool_stream_usage": {
+      "model_calls": 2,
+      "completed_requests": 2,
+      "tool_calls": 1,
+      "text_deltas": 35,
+      "thinking_deltas": 55,
+      "thinking_chars": 251,
+      "usage": {
+        "input": 604,
+        "output": 129,
+        "cacheRead": 384,
+        "cacheWrite": 0,
+        "totalTokens": 1117
+      },
+      "usage_observed": true,
+      "usage_complete": true,
+      "raw_usage": [
+        {
+          "prompt_tokens": 431,
+          "completion_tokens": 38,
+          "total_tokens": 469,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 431
+        },
+        {
+          "prompt_tokens": 557,
+          "completion_tokens": 91,
+          "total_tokens": 648,
+          "prompt_tokens_details": {
+            "cached_tokens": 384
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 55
+          },
+          "prompt_cache_hit_tokens": 384,
+          "prompt_cache_miss_tokens": 173
+        }
+      ],
+      "response_models": [
+        "deepseek-flash"
+      ],
+      "errors": []
+    },
+    "steer_button": {
+      "model_calls": 2,
+      "completed_requests": 2,
+      "tool_calls": 1,
+      "text_deltas": 46,
+      "thinking_deltas": 95,
+      "thinking_chars": 421,
+      "usage": {
+        "input": 447,
+        "output": 180,
+        "cacheRead": 1280,
+        "cacheWrite": 0,
+        "totalTokens": 1907
+      },
+      "usage_observed": true,
+      "usage_complete": true,
+      "raw_usage": [
+        {
+          "prompt_tokens": 739,
+          "completion_tokens": 133,
+          "total_tokens": 872,
+          "prompt_tokens_details": {
+            "cached_tokens": 512
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 95
+          },
+          "prompt_cache_hit_tokens": 512,
+          "prompt_cache_miss_tokens": 227
+        },
+        {
+          "prompt_tokens": 988,
+          "completion_tokens": 47,
+          "total_tokens": 1035,
+          "prompt_tokens_details": {
+            "cached_tokens": 768
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_cache_hit_tokens": 768,
+          "prompt_cache_miss_tokens": 220
+        }
+      ],
+      "response_models": [
+        "deepseek-flash"
+      ],
+      "errors": [],
+      "acknowledged": true
+    },
+    "cancel": {
+      "model_calls": 2,
+      "completed_requests": 2,
+      "tool_calls": 1,
+      "text_deltas": 0,
+      "thinking_deltas": 9,
+      "thinking_chars": 32,
+      "usage": {
+        "input": 154,
+        "output": 47,
+        "cacheRead": 896,
+        "cacheWrite": 0,
+        "totalTokens": 1097
+      },
+      "usage_observed": true,
+      "usage_complete": false,
+      "raw_usage": [
+        {
+          "prompt_tokens": 1050,
+          "completion_tokens": 47,
+          "total_tokens": 1097,
+          "prompt_tokens_details": {
+            "cached_tokens": 896
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 9
+          },
+          "prompt_cache_hit_tokens": 896,
+          "prompt_cache_miss_tokens": 154
+        }
+      ],
+      "response_models": [
+        "deepseek-flash"
+      ],
+      "errors": [
+        "This operation was aborted"
+      ],
+      "settled_within_10s": true
+    },
+    "compaction": {
+      "model_calls": 1,
+      "completed_requests": 1,
+      "tool_calls": 0,
+      "text_deltas": 0,
+      "thinking_deltas": 0,
+      "thinking_chars": 1219,
+      "usage": {
+        "input": 636,
+        "output": 1188,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 1824
+      },
+      "usage_observed": true,
+      "usage_complete": true,
+      "raw_usage": [
+        {
+          "prompt_tokens": 636,
+          "completion_tokens": 1188,
+          "total_tokens": 1824,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 556
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 636
+        }
+      ],
+      "response_models": [
+        "deepseek-flash"
+      ],
+      "errors": []
+    },
+    "resource_audit": {
+      "access_count": 1690,
+      "negative_rejected": 2
+    },
+    "raw_usage_fields": [
+      "completion_tokens",
+      "completion_tokens_details",
+      "prompt_cache_hit_tokens",
+      "prompt_cache_miss_tokens",
+      "prompt_tokens",
+      "prompt_tokens_details",
+      "total_tokens"
+    ],
+    "local_trace_id": "4221f4517fd84b05a9a4697a3113771a",
+    "otlp": {
+      "spans": 13,
+      "model_spans": 7,
+      "tool_spans": 3,
+      "control_spans": 2,
+      "compaction_model_spans": 1,
+      "tokens_exported": true,
+      "payload_text_exported": false
+    },
+    "restore_usage": {
+      "model_calls": 1,
+      "completed_requests": 1,
+      "tool_calls": 0,
+      "text_deltas": 55,
+      "thinking_deltas": 39,
+      "thinking_chars": 176,
+      "usage": {
+        "input": 1311,
+        "output": 95,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 1406
+      },
+      "usage_observed": true,
+      "usage_complete": true,
+      "raw_usage": [
+        {
+          "prompt_tokens": 1311,
+          "completion_tokens": 95,
+          "total_tokens": 1406,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 39
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 1311
+        }
+      ],
+      "response_models": [
+        "deepseek-flash"
+      ],
+      "errors": []
+    },
+    "restored_otlp": {
+      "spans": 2,
+      "model_spans": 1,
+      "tool_spans": 0,
+      "control_spans": 0,
+      "compaction_model_spans": 0,
+      "tokens_exported": true,
+      "payload_text_exported": false
+    }
+  },
+  "source_sha256_at_report": {
+    "verification\\pi-step0\\control.py": "3b7d0837223cc71d92be4f224da29e517440635a89ba68d45074eeb23ff7eb2e",
+    "verification\\pi-step0\\otlp.py": "ab4980ab11ae7ed6127a55827a276ac36a68d096be9598ceba887f2e10d6eeeb",
+    "verification\\pi-step0\\package-lock.json": "69a6fbf67312ffb22cad56856105c57b445b323dc4c864ef6eeab3ba585cdd2d",
+    "verification\\pi-step0\\package.json": "58053fd3fc350bfca6e350e06c7a949a575cc180fb9edd17990fb59fb99456a9",
+    "verification\\pi-step0\\replay.py": "8ad0265e873e3333b7e12c80f1321e59a901c4d5f521f4a4b0eaa4d0d1524aa3",
+    "verification\\pi-step0\\report.py": "b6ed52c4b24e7b16c115e4c182f1372cfa86ddda73f2521050257a20b70a68da",
+    "verification\\pi-step0\\run.py": "7c7c215d4d4c7ad25e8f822c4ee2bb00029d6c2e42ea9a1351a2941df1474057",
+    "verification\\pi-step0\\test_contracts.py": "b9244d34a733841a100f103a7cf2d96a401b4d0319ef9ee03c500ba6fc4b5fb5",
+    "verification\\pi-step0\\worker.mjs": "91963c4e7fffa45801915c357b38ca1dba1fd4a3e83c8a960571bec22b298bc2"
+  },
+  "limits": {
+    "normal_output": 4096,
+    "compaction_output": 8192,
+    "compaction_reserve": 16384,
+    "keep_recent_for_forced_test_only": 64,
+    "automatic_retry": false,
+    "automatic_compaction": false
+  },
+  "interpretation": "Protocol completion is not full business acceptance. HTTP counts replay archived operations, not actual supplier network requests. Pi input excludes cacheRead. Missing raw cache-write usage is unknown. Cancelled request accounting is incomplete."
+}
