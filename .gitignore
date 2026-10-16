@@ -13,6 +13,7 @@ build/
 dist/
 .idea/
 .tmp/
+node_modules/
 
 # Downloaded upstream repositories and generated experiment state.
 /experiments/experiment_5_agent_notes_lab/*/source/*

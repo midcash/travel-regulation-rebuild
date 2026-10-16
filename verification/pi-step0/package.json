@@ -1,0 +1,7 @@
+{
+  "name": "travel-pi-step0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --check worker.mjs"},
+  "dependencies": {"@earendil-works/pi-coding-agent": "1.3.0"}
+}
