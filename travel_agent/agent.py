@@ -17,11 +17,11 @@ from .real_tools import RealTools, REAL_SCHEMAS
 
 @dataclass(frozen=True)
 class Limits:
-    max_steps: int = 20
-    max_tool_calls: int = 24
+    max_steps: int = 10
+    max_tool_calls: int = 12
     timeout_s: float = 180
     model_timeout_s: float = 45
-    max_tokens: int = 240000
+    max_tokens: int = 24000
     retry_delay_s: float = 0.05
 
 

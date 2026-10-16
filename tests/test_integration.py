@@ -1,4 +1,5 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from datetime import datetime
 import json
 from pathlib import Path
 import tempfile
@@ -9,7 +10,7 @@ import urllib.error
 import urllib.request
 
 from travel_agent.agent import plan_trip
-from travel_agent.domain import scenario_by_id
+from travel_agent.domain import CHINA, scenario_by_id
 from travel_agent.providers import Baseline
 from travel_agent.server import make_server
 from travel_agent.telemetry import Store, make_otel
@@ -34,7 +35,8 @@ class IntegrationTests(unittest.TestCase):
         return f"http://127.0.0.1:{server.server_address[1]}"
 
     def test_dashboard_http_job_evaluation_and_trace(self):
-        base = self.start(make_server(self.store, Baseline(), port=0))
+        base = self.start(make_server(self.store, Baseline(), port=0,
+                                    clock=lambda: datetime(2026, 9, 10, 9, tzinfo=CHINA)))
         def fetch(path, body=None, client=True):
             headers = {"Content-Type": "application/json"}
             if client: headers["X-Travel-Client"] = "dashboard"

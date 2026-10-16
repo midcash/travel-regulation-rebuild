@@ -6,7 +6,7 @@
       "origin": "杭州",
       "destination": "上海",
       "meeting_location": "东方明珠塔",
-      "meeting_at": "2026-11-12T08:00+08:00"
+      "meeting_at": "2026-09-12T08:00+08:00"
     }
   },
   {
@@ -16,7 +16,7 @@
       "origin": "杭州",
       "destination": "上海",
       "meeting_location": "东方明珠塔",
-      "meeting_at": "2026-11-12T08:00+08:00"
+      "meeting_at": "2026-09-12T08:00+08:00"
     },
     "faults": {
       "search_intercity": 1
@@ -29,7 +29,7 @@
       "origin": "杭州",
       "destination": "上海",
       "meeting_location": "东方明珠塔",
-      "meeting_at": "2026-11-12T08:00+08:00"
+      "meeting_at": "2026-09-12T08:00+08:00"
     },
     "overrides": {
       "hotel_price_cny": 650
@@ -42,7 +42,7 @@
       "origin": "杭州",
       "destination": "上海",
       "meeting_location": "东方明珠塔",
-      "meeting_at": "2026-11-12T08:00+08:00"
+      "meeting_at": "2026-09-12T08:00+08:00"
     },
     "overrides": {
       "late_arrival": true
@@ -55,7 +55,7 @@
       "origin": "杭州",
       "destination": "上海",
       "meeting_location": "东方明珠塔",
-      "meeting_at": "2026-11-12T08:00+08:00"
+      "meeting_at": "2026-09-12T08:00+08:00"
     },
     "overrides": {
       "missing_hotel": true
@@ -68,7 +68,7 @@
       "origin": "杭州",
       "destination": "上海",
       "meeting_location": "东方明珠塔",
-      "meeting_at": "2026-11-12T08:00+08:00"
+      "meeting_at": "2026-09-12T08:00+08:00"
     },
     "faults": {
       "search_intercity": 2

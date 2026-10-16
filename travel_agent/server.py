@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -206,7 +206,10 @@ def make_server(store, provider, port=8766, otel=None, *, clock=None):
             if path == "/api/health":
                 return self.send(200, {"status": "ok"})
             if path == "/api/config":
+                captured_at = app.clock().astimezone(CHINA)
+                example_date = (captured_at + timedelta(days=3)).date().isoformat()
                 return self.send(200, {"real_tools": [s["function"]["name"] for s in REAL_SCHEMAS if s["function"]["name"] != "finish"], "ollama_enabled": provider.name == "ollama", "model": provider.model,
+                    "example_meeting_at": example_date + "T09:00",
                     "deepseek_enabled": bool(os.getenv("DEEPSEEK_API_KEY")),
                     "deepseek_model": provider.model if provider.name == "deepseek" else os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
                     "scenarios": [{"id": x["id"], "label": x["label"], "request": x["request"]} for x in scenarios()]})

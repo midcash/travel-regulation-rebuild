@@ -35,6 +35,21 @@ class MissingDataProvider:
 
 
 class RequestParserTests(unittest.TestCase):
+    def test_page_examples_use_injected_shanghai_clock_and_parse(self):
+        provider = MissingDataProvider()
+        with tempfile.TemporaryDirectory() as directory:
+            server = make_server(Store(Path(directory) / "traces.sqlite3"), provider,
+                                 port=0, clock=lambda: TEST_NOW)
+            self._serve(server)
+            config = self._get("/api/config")
+            self.assertEqual(config["example_meeting_at"], "2030-09-15T09:00")
+            for destination, place, mode in (("三亚", "三亚湾红树林国际会议中心", "飞机"),
+                                             ("上海", "上海东方明珠塔", "火车")):
+                text = f"2030-09-15早上9点在{place}开会，目的地{destination}，从杭州出发，乘{mode}，提前一晚抵达并住宿。"
+                parsed = parse_natural_request(text, TEST_NOW)
+                self.assertEqual(parsed["destination"], destination)
+                self.assertEqual(parsed["meeting_at"], "2030-09-15T09:00+08:00")
+
     def test_naive_structured_meeting_time_is_interpreted_as_china_time(self):
         request = {"meeting_at": "2030-09-12T16:30", "arrive_previous_day": True}
 

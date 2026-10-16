@@ -117,7 +117,8 @@ function renderConversation(){
     $('conversation').innerHTML='<div class="welcome"><div class="welcome-mark" aria-hidden="true">✳</div><h1>下一程，交给我来整理。</h1><p>告诉我你的会议安排。我会查询交通与住宿，在需要时请你确认，并把成果整理在右侧。</p><div class="suggestions"><button class="suggestion" data-example="flight">规划一场异地会议 <span>↗</span></button><button class="suggestion" data-example="train">提前一晚到达，乘高铁出行 <span>↗</span></button></div></div>';
     $('conversation').querySelectorAll('[data-example]').forEach(el=>el.onclick=()=>{
       $('scenario').value='natural';$('scenario').onchange();
-      $('natural-request').value=el.dataset.example==='flight'?'三天后早上9点在三亚湾红树林国际会议中心开会，从杭州出发，乘飞机，提前一晚抵达并住宿。':'三天后早上9点在上海东方明珠塔开会，从杭州出发，乘火车，提前一晚抵达并住宿。';
+      const day=state.config.example_meeting_at?.slice(0,10)||$('meeting-at').value.slice(0,10);
+      $('natural-request').value=el.dataset.example==='flight'?`${day}早上9点在三亚湾红树林国际会议中心开会，从杭州出发，乘飞机，提前一晚抵达并住宿。`:`${day}早上9点在上海东方明珠塔开会，目的地上海，从杭州出发，乘火车，提前一晚抵达并住宿。`;
       $('natural-request').focus?.();
     });
     return;
@@ -238,8 +239,7 @@ async function init(){
     $('section-label').textContent='工作台';
     $('scenario').innerHTML=state.config.scenarios.map(s=>`<option value="${esc(s.id)}">${esc(s.label)}</option>`).join('')+'<option value="natural">自然语言请求</option><option value="custom">结构化自定义会议</option>';
     $('scenario').value='natural';
-    const nextDate=new Date();nextDate.setDate(nextDate.getDate()+3);
-    $('meeting-at').value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(nextDate)+'T09:00';
+    $('meeting-at').value=state.config.example_meeting_at;
     if(!state.config.deepseek_enabled&&!state.config.ollama_enabled)$('tool-mode').value='demo';
     if(!state.config.ollama_enabled){for(const id of ['run-provider','eval-provider']){$(id).querySelector('[value="ollama"]').disabled=true;$(id).querySelector('[value="ollama"]').textContent='Ollama · 需启动时启用';}}
     for(const id of ['run-provider','eval-provider']){const option=$(id).querySelector('[value="deepseek"]');option.disabled=!state.config.deepseek_enabled;option.textContent=state.config.deepseek_enabled?`DeepSeek · ${state.config.deepseek_model}`:'DeepSeek · 请配置 .env 后重启';if(state.config.deepseek_enabled)$(id).value='deepseek';}
