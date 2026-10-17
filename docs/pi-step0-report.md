@@ -8,7 +8,7 @@ Pi 会话 SDK 可以从 SQLite 保存的外部 entries 注入历史消息、工�
 
 采用 Pi SDK 1.3.0、Python 管理的 Windows Node 子进程可行。DeepSeek 的工具调用、文本流、推理流、缓存命中 usage、steer、取消、压缩和恢复已实际跑通。压缩与普通回答不能共用过小的输出上限；原 4,096 上限曾导致摘要不完整，最终为压缩单独使用 8,192 上限，并保留 SDK 自身更小的限制。
 
-正式历史回放四类各三次，均完成相应协议和恢复断言；但有 14 次请求返回“无历史数据”，因此不能将 12 次正常结束解释为 12 次完整可行方案。正式范围、逐次计量、失败与被替代的调试数据见 [机器可读结果](pi-step0-results.json)。
+正式历史回放四类各三次，均完成相应协议和恢复断言；但有 14 次请求返回“无历史数据”，因此不能将 12 次正常结束解释为 12 次完整可行方案。机器可读结果已移到被忽略的 `artifacts/pi-step0/pi-step0-results.json`；原始版本可从 `legacy-pre-pi:docs/pi-step0-results.json` 取回。
 
 ## 版本、环境与复现
 
@@ -36,7 +36,7 @@ live/probe/replay 会产生模型费用，不访问真实差旅供应商；结�
 
 ## 各项验证结果
 
-**回归基线通过。** 旧循环恢复 10 次模型、12 次工具、24,000 token，HIL 默认 3 次人工请求。固定回归保持 2026-09 日期，HTTP 测试注入固定上海时钟；不放宽 oracle。132 项 Python 回归、三项 Node UI 检查通过，baseline eval 为 6/6。页面快捷示例与结构化时间从服务端上海当前时间加三天生成，使用解析器支持的明确日期，详见 [基线说明](regression-baseline.md)。
+**回归基线通过。** 旧循环恢复 10 次模型、12 次工具、24,000 token，HIL 默认 3 次人工请求。固定回归保持 2026-09 日期，HTTP 测试注入固定上海时钟；不放宽 oracle。132 项 Python 回归、三项 Node UI 检查通过，baseline eval 为 6/6。页面快捷示例与结构化时间从服务端上海当前时间加三天生成，使用解析器支持的明确日期。原基线说明保存在 `legacy-pre-pi:docs/regression-baseline.md`。
 
 **工具、流式与计量通过。** 真实模型生成工具调用；Python 提交 SQLite 工具结果后才回传 Node；模型依据结果完成文本回答。收到文本与推理增量，并从完整消息取得推理内容。原始 DeepSeek usage 具有 `prompt_tokens`、`completion_tokens`、`total_tokens`、`prompt_cache_hit_tokens`、`prompt_cache_miss_tokens`、`prompt_tokens_details.cached_tokens` 和 `completion_tokens_details.reasoning_tokens`。
 
@@ -84,6 +84,8 @@ Pi 的 `usage.input` 表示未命中的输入；总输入为 input + cacheRead�
 80,000 约为本轮最大 49,196 的 1.6 倍，工具和 HTTP 也留有余量，但这只是单个稀疏历史案例的起始设置。它不是生产上限已经校准，也不保证所有外部失败能恢复；未知价格、低覆盖和不完整方案不能通过扩大预算掩盖。
 
 ## 后续边界
+
+2026-10-17 裁决更新：以下两段是第 0 步结束时的旧建议，已被 [迁移方案](pi-migration-plan.md) 取代。假模型仅用于自动测试，不提供产品演示；不保留 `plan_trip` 兼容入口和旧 eval。正式真实三亚链路通过后，在同一交付批次删除旧循环、HIL 及关联代码，再逐项实现 B01–B12。
 
 选择无凭证 Pi 内确定性假模型，使用 SDK 官方 faux provider；自检真实 Pi 循环、工具、事件、压缩、SQLite 恢复及进程生命周期，模拟 token 不进入 DeepSeek 预算。旧 baseline eval 保持独立，以检查 grader 与旧合同，不作为新业务质量证明。
 

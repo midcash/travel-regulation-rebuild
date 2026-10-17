@@ -62,7 +62,7 @@ def generate():
         'limits': {'normal_output': 4096, 'compaction_output': 8192, 'compaction_reserve': 16384,
                    'keep_recent_for_forced_test_only': 64, 'automatic_retry': False, 'automatic_compaction': False},
         'interpretation': 'Protocol completion is not full business acceptance. HTTP counts replay archived operations, not actual supplier network requests. Pi input excludes cacheRead. Missing raw cache-write usage is unknown. Cancelled request accounting is incomplete.'}
-    target = ROOT / 'docs/pi-step0-results.json'
+    target = ART / 'pi-step0-results.json'
     target.write_text(json.dumps(evidence, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(ranges, ensure_ascii=False, indent=2))
 

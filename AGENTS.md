@@ -1,24 +1,14 @@
-# Project guidance
+# 必读文档
 
-- Keep the implementation small, direct, and easy to understand.
-- Prefer the simplest design that satisfies the functional, security, performance, and maintainability requirements.
-- Avoid introducing abstractions, layers, dependencies, or configuration unless they solve a concrete problem.
-- Prefer existing project patterns over new patterns.
-- Avoid unrelated refactoring, unless it is necessary for correctness, safety, or maintainability.
-- For non-trivial changes, clarify the problem and acceptance criteria before implementation.
-- Choose verification depth according to the risk and scope of the change.
-- When simplicity conflicts with correctness, security, or explicit requirements, prioritize those requirements and explain the trade-off.
+- 开始开发前：`README.md`、`CONTEXT.md`、`docs/development.md`。
+- 涉及业务行为：`docs/product-behavior.md`。
+- 涉及 Pi 迁移：`docs/pi-migration-plan.md`；核查第 0 步结论时读 `docs/pi-step0-report.md`。
+- 操作工单：`docs/agents/issue-tracker.md`、`docs/agents/triage-labels.md`。
+- 修改领域术语：`docs/agents/domain.md`。
 
-## Agent skills
+# 禁止阅读的目录
 
-### Issue tracker
-
-Issues and specifications live in the GitHub repository configured in `docs/agents/issue-tracker.md`; use `gh` for issue operations.
-
-### Triage labels
-
-Use the canonical labels recorded in `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-This is a single-context repository. Read `CONTEXT.md` and relevant ADRs when present; see `docs/agents/domain.md`.
+- `experiments/`：旧实验，仅允许现有回放测试按既定路径读取夹具。
+- `artifacts/`、`.tmp/`：本机运行数据，仅在用户指定的诊断或验收范围内访问。
+- `.git/`：使用 Git 命令查询版本。
+- `.venv/`、`node_modules/`、`**/node_modules/`、`build/`、`dist/`：禁止通读；执行测试、安装依赖及核对锁定依赖接口所需的精确文件访问除外。

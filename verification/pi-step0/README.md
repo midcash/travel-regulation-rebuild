@@ -1,6 +1,6 @@
 # Pi 第 0 步验证
 
-这是隔离验证工具，不是新生产运行时。依赖精确锁定 Pi SDK 1.3.0。先阅读 [通过/失败条件](../../docs/pi-step0-criteria.md) 和 [最终报告](../../docs/pi-step0-report.md)。
+这是隔离验证工具，不是新生产运行时。依赖精确锁定 Pi SDK 1.3.0。先阅读 [最终报告](../../docs/pi-step0-report.md) 和 [迁移方案](../../docs/pi-migration-plan.md)。原通过/失败条件可在 `legacy-pre-pi` 标签查阅。
 
 ```powershell
 npm.cmd ci --ignore-scripts --no-audit --no-fund
