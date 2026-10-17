@@ -1,6 +1,6 @@
 # Pi 迁移方案
 
-日期：2026-10-17。状态：方案与工单拆分，正式接入尚未实施。依据为 [B01–B12](product-behavior.md)、[第 0 步报告](pi-step0-report.md) 和本次用户裁决。父工单 [#11](https://github.com/midcash/travel-regulation-rebuild/issues/11)。
+日期：2026-10-17。状态：按复审意见修订，等待用户再次确认；全部工单保持 needs-triage，不开始 M01。依据为 [B01–B12](product-behavior.md)、[第 0 步报告](pi-step0-report.md) 和本次用户裁决。父工单 [#11](https://github.com/midcash/travel-regulation-rebuild/issues/11)。
 
 最小实现是 Python 管理每个活跃会话的一个 Node 子进程，采用官方 Pi SDK 内存会话，SQLite 为唯一存储。复用现有供应商 HTTP 适配与网页结构，替换执行和交互内核。不保留长期双引擎兼容或产品假模型演示。完整迁移超过八个文件，本轮只做清理和规划。
 
@@ -21,14 +21,33 @@
 
 ## 批次与依赖
 
-第一批为当前清理。第二批的四个基础子工单组成**一个可发布切换批次**，中间提交只供审查，不把半成品接到默认入口：
+第一批清理已完成。第二批拆为六个基础子工单；M03b 完成前新链路只供开发验收，**不得切换 main.py、启动脚本、默认网页或 CLI 默认执行路径**：
 
 1. M01：Node 运行进程、协议、隔离、压缩、模型注册、计量。
 2. M02：Python 桥接、SQLite、工具适配、条件版本、按钮、取消，依赖 M01 协议。
-3. M03：server、成果区、CLI、真实三亚验收及同批旧代码删除，依赖 M01/M02/M04。
-4. M04：tests/e2e 回放、历史夹具、改口计量与旧测试替换，可与 M01/M02 并行。
+3. M03a：新 server 接口、SSE、三栏页面与 CLI 接通，依赖 M02；用显式开发入口验收，保留默认旧入口。
+4. M04a：回放迁 tests/e2e、最小脱敏夹具及桥接层回放。夹具和回放代码可与 M01/M02 并行准备；完成桥接回放验收依赖 M02，所以 Blocked by M02，不依赖 M03a 的 server/SSE。
+5. M04b：完整 API/SSE 端到端测试、改口补测与预算校准，依赖 M03a 和 M04a。
+6. M03b：真实三亚验收，成功后同批删除旧引擎和 domain 旧合同、切换默认入口，依赖 M04b。
 
-第二批先保持已有真实查询与成果展示能力；真实三亚成功并删除旧引擎后才发布。第三批按 B01→B12 逐项交付。第二批不宣称业务场景全部通过。
+第二批保持已有真实查询与成果展示能力；第三批 B 单可以并行，不以编号先后作为依赖。M03b 不宣称 B 场景全部通过。以下箭头表示完成验收的阻塞关系，M04a 准备工作可提前进行：
+
+```mermaid
+flowchart LR
+  M01 --> M02
+  M02 --> M03a
+  M02 --> M04a
+  M03a --> M04b
+  M04a --> M04b
+  M04b --> M03b
+  M03b --> Independent["B01、B02、B03、B04、B07、B10、B11、B12"]
+  M03b --> B05
+  M03b --> B08
+  B05 --> B06
+  B08 --> B09
+```
+
+分组内各单只依赖 M03b；B06 通过 B05、B09 通过 B08 传递依赖 M03b。
 
 ```text
 网页 / CLI → Python server / 会话服务 → SQLite（唯一存储）
@@ -67,13 +86,13 @@ Python 增加小型进程桥接与会话服务，复用 telemetry 和供应商�
 
 工具先登记 pending；供应商结果和证据同事务提交后才交 Node。返回但未提交、崩溃中的调用标 unknown，重查是新查询 ID；重复已完成调用只回读结果，不查供应商。保存实际查询参数，不能仅存用户抽象条件。
 
-工具只返回 status、必要事实/候选、evidence_ids、queried_at、condition_version、实际参数和 warnings/error；不反复注入原始 JSON/Trace/政策全文。列表默认最多五条，明确截断与覆盖，需要更多走显式分页/查询。详情仅接受该会话已返回候选并校验证据归属。原始数据留私有 SQLite，模型和页面按 ID 读取必要投影。
+工具只返回 status、必要事实/候选、evidence_ids、queried_at、condition_version、实际参数和 warnings/error；不反复注入原始 JSON/Trace/政策全文。列表必须先应用用户航司、时间等有效条件，再排序并截取最多五条，不能先截五条再筛选。供应商支持的条件下推，不支持的在已获取数据上过滤，并明确分页/覆盖限制；不擅自扩大查询或把局部无匹配说成全市场无结果。需要更多走显式分页/查询。测试匹配项位于原列表第六条以后仍可返回。详情仅接受该会话已返回候选并校验证据归属。原始数据留私有 SQLite，模型和页面按 ID 读取必要投影。
 
 首版会话级整数条件版本。明确采纳/修改递增，比较不变更选择。页面按钮经 Python 校验候选和证据所属会话后直接事务写库，expected_version 冲突为 409；运行中 steer，空闲仅落库、下一轮注入，不调用模型。旧版本工具结果归档，以实际参数与变化字段判断复用范围，不全盘丢弃，也不覆盖新条件。
 
 每条用户消息接收时捕获上海时间（+08:00），作为相对日期解释基准；工具执行时按当前注入时钟再次拦截过去日期，覆盖跨午夜。历史解释不发在线查询。压缩后及恢复前从 SQLite 注入当前条件、选定项、引用证据 ID、查询时间和未完成问题；模型摘要不覆盖库内状态，恢复保留 DeepSeek reasoning/tool 消息结构。
 
-## M03：接口、页面、真实切换
+## M03a：接口、页面、CLI 接通
 
 保留回环绑定和现有同源安全校验。新接口：
 
@@ -83,19 +102,27 @@ Python 增加小型进程桥接与会话服务，复用 telemetry 和供应商�
 - GET /api/conversations/{id} 返回条件、选定项、成果/证据引用、版本、运行状态、用量和一致快照内的最新事件序号，避免取状态与订阅间漏事件。
 - POST /api/conversations/{id}/selection 接 candidate_id/evidence_id/expected_version，事务直写；POST /api/conversations/{id}/cancel 幂等取消。
 
-左侧历史改会话，中间语义交互，右侧成果接新 API/SSE，刷新可恢复。删除旧轮询/HIL 表单/固定场景/演示/评测控件；无密钥明确错误，不降级假模型。CLI 保留 serve/trace；run 改为会话服务文本请求（可带 conversation ID）。删除旧 plan_trip 合同、structured scenario、eval、baseline 和旧 providers 入口，模型由新运行时配置。
+在显式开发入口中，左侧历史改会话、中间语义交互、右侧成果接新 API/SSE，刷新可恢复；新页面不用旧轮询/HIL 表单/固定场景/演示/评测控件。CLI 接入会话服务文本请求，可带 conversation ID；serve/trace 接通新服务。无密钥明确错误，不降级假模型。M03a 不改变默认入口，不删除默认旧页面/CLI 和引擎；这些删除与默认切换归 M03b。
+
+## M03b：真实三亚验收与同批删除
+
+完成条件依赖 M04b：正式 API/SSE 回放、改口补测及预算校准先通过。真实验收使用 M03a 的显式开发入口，不提前切换默认入口。
 
 从页面提交当次未来日期的三亚出行，真实 Pi/DeepSeek/供应商完成现有去程、酒店、必要地点与接驳并进入成果区，来源/时间/证据可追查。记录提交版本、输入、Trace、截图与全部计量，不固定历史商品或报价，不预订。缺少真实凭证、服务失败或仅回放通过，均不能切换。
 
 成功后同批删除 agent.py、hil.py、human.py、providers.py、request_parser.py、evaluation.py、旧 tools.py/demo prompt/data、evals、scenarios 及关联测试/API/UI。先做引用闭包：real_tools 的 schema helper、供应商使用的时区/fingerprint 等抽为小型共用事实工具，不把旧模块改名保留。domain.py 拆掉 normalize_request/scenario/四段 verdict/一晚格式合同，保留确实使用的事实校验，新会话与成果校验接管。供应商合同测试保留，混合测试提取有效断言后删除旧部分。
 
-旧等待 HIL 在新历史投影中标“旧版任务，只读”，禁止继续执行；不修改旧表或旧状态。临时库验证新表不影响旧提交读取，回滚标签后旧任务仍可用。新会话回滚时暂不可见，但不删表/数据。
+旧 HIL 只有本地测试数据，不做新历史投影或“旧版任务”功能。不修改、不删除旧表及记录即可；新会话回滚时暂不可见，但不删新表/数据。成功后的同批删除还包含旧默认页面控件、CLI eval/scenarios/baseline/demo/structured scenario 和 plan_trip 合同，最后切换默认入口。
 
-## M04：测试环境及第 0 步遗留
+## M04a：桥接层回放与夹具
 
 replay.py 迁到 tests/e2e/replay.py，保留真正引用的最小脱敏历史夹具，记录源标签/路径和哈希；不复制无关实验或私人原始数据。默认自动发现运行无凭证测试；假模型只在 tests 注册，生产 runtime 不留 fake 开关。把第 0 步有价值的协议/进程/恢复断言迁为自动测试，依赖 baseline/HIL 的兼容探针改为测试专用夹具，清理不再使用的 verification 驱动，删除 experiments 引用。
 
-回放经过正式 server→桥接→Pi→工具边界→SQLite→SSE/状态，仅在供应商边界换历史数据；不能直连 step0 worker 冒充新路径。默认假模型 token 不当作真实计量，付费模型测试显式启用。固定时钟告知模型，未知参数返回 NoHistoricalData 并计覆盖分母；真实测试用当次未来日期。
+M04a 回放经过正式 Python 桥接→Pi→工具边界→SQLite，不依赖 server/SSE；不能直连 step0 worker 冒充生产桥接。夹具和协议断言可先准备，M02 接通后完成桥接验收。默认假模型 token 不当作真实计量，付费模型测试显式启用。固定时钟告知模型，未知参数返回 NoHistoricalData 并计覆盖分母；真实测试用当次未来日期。
+
+## M04b：完整 API/SSE 与改口计量
+
+依赖 M03a/M04a，将同一测试环境扩展为正式 server→桥接→Pi→工具边界→SQLite→SSE/状态，覆盖真实路由和页面状态。改口补测和预算校准在此完成，测试固定供应商边界，付费模型与真实供应商时延另行记录。M03b 只有在校准门禁通过后才进入真实验收；不以 M04a 桥接回放代替此项。
 
 ### 自动压缩和预算
 
@@ -103,7 +130,9 @@ replay.py 迁到 tests/e2e/replay.py，保留真正引用的最小脱敏历史�
 
 Node 每次模型请求前的预算估算涵盖系统提示、schema、待发消息、选择/证据注入和输出预留；预算拦截不递归调用压缩。SDK 一次压缩提交后重新预检，同一边界再次触发或仍不足则明确停止；失败/截断不应用摘要，不反复压缩。SDK 上下文溢出后的恢复请求也须走相同预检，失败不再重放。工具续轮和摘要请求均受限，不只检查用户入口；剩余额度不足支付压缩和回答时停止，不偷偷扩额。启动时要求 C 大于 16,384+6,000，否则拒绝该配置，不能使用负阈值或无法保留近期历史的配置。
 
-初始每请求上限：12 次模型、20 次工具、30 次 HTTP、80,000 累计 token、180 秒活跃时间、单模型 45 秒。摘要/重试/取消/恢复继续都计量，工具 schema 拒绝另记尝试数。运行中 steer 归原 run，不重置预算；新空闲请求新开预算，会话另累计。测试阈值前/等于/后、工具增长、长历史恢复、截断、取消和额度不足，断言证据不丢、无压缩循环。
+初始每请求上限维持：12 次模型、20 次工具、30 次 HTTP、80,000 累计 token、180 秒活跃时间、单模型 45 秒。80k 包含缓存命中的输入，是所有模型请求的 input+cacheRead+cacheWrite+output 之和（有原始 usage 时与 prompt_tokens+completion_tokens 交叉校验，推理不重复加）。这是累计用量上限，不是上下文窗口大小或未命中 token 上限。摘要/重试/取消/恢复继续都计量，工具 schema 拒绝另记尝试数。运行中 steer 归原 run，不重置预算；新空闲请求新开预算，会话另累计。测试阈值前/等于/后、工具增长、长历史恢复、截断、取消和额度不足，断言证据不丢、无压缩循环。
+
+[预算核对](pi-budget-audit.md) 给出逐次来源：394,607 token/104 工具是四类各三次、共十二次累计；正常完整工具覆盖回放两次为 27,936/36,487 token。全部正式样本最高 49,196，现有数据不支持调高 80k，也不能保证尚未实测的在线三亚一定在预算内。M01 必须实现可核验的计数与预算预检；M04b 用正式 API 完整覆盖回放及改口各类 3–5 次校准，再检查 M03b 的真实供应商查询计划与时延。校准后要求模型/工具/HTTP/token/活跃时间的最大样本乘 1.25（token 再加下一回答 4,096 的预留）不超过相应配置；否则 M04b 不通过，先在受控配置中调整对应预算、记录前后值和样本依据，再做校准，不在验收中自动加额或关闭限制。真实供应商不可预知失败仍可触发限额，不能承诺任意链路必然成功；达到限制是失败，不可记为三亚验收通过。
 
 ### 单一重试责任
 
@@ -125,7 +154,7 @@ Node 回传原始及 Pi usage，Python Trace/OTLP 关联会话/run/request/query
 
 ## 第三批：逐项 B 验收
 
-每项独立子工单引用 product-behavior 对应段落，新增正反例并清理关联旧业务约束，按顺序验收：
+每项独立子工单引用 product-behavior 对应段落，新增正反例并清理关联旧业务约束。B01/B02/B03/B04/B05/B07/B08/B10/B11/B12 只依赖 M03b，可并行；B06 依赖 B05（明确采纳后的修改处理），B09 依赖 B08（隔日恢复后解释历史），均传递依赖 M03b。工具/状态机制已由 M02 提供，不能仅因共享文件或编号相邻增设业务阻塞关系：
 
 1. B01 部分查询与航司条件：解除强制完整方案前置字段。
 2. B02 只追问必要字段：解除无关会议/预算/返程/住址必填。
@@ -150,12 +179,18 @@ Node 回传原始及 Pi usage，Python Trace/OTLP 关联会话/run/request/query
 
 132 项 Python 回归、三项 Node UI 检查、10 项第 0 步合同测试通过。启动 PowerShell AST 检查通过，仅保留 Port 参数；变更文档链接、标签目标、Git 忽略规则检查通过。移走的 JSON 与标签原件内容相同（Git LF 与 Windows 检出 CRLF 归一后逐字节一致）。本轮没有重跑付费模型和真实供应商，也没有实施正式 Pi 接入。
 
+## 复审修订核验
+
+本轮从标签原件重算十二次累计和逐次缓存用量，校验本地副本一致；检查四份变更文档链接、18 个子工单链接、正文与原生依赖无环及标签保持 needs-triage，均通过。仅修改文档与工单，没有执行付费模型/供应商或修改生产代码；未重复运行上一批的 Python/UI 回归。等待用户审阅确认后再改标签并开始 M01。
+
 ## GitHub 子工单
 
 - [M01 · 正式 Node 会话进程、隔离与模型计量](https://github.com/midcash/travel-regulation-rebuild/issues/12)
 - [M02 · Python 桥接、SQLite 会话与精简证据工具](https://github.com/midcash/travel-regulation-rebuild/issues/13)
-- [M03 · 接通新 API 与成果区、真实三亚后同批删除旧引擎](https://github.com/midcash/travel-regulation-rebuild/issues/14)
-- [M04 · 迁移 tests/e2e 回放并补齐改口计量](https://github.com/midcash/travel-regulation-rebuild/issues/15)
+- [M03a · 新接口、SSE、页面三栏与 CLI 接通](https://github.com/midcash/travel-regulation-rebuild/issues/14)
+- [M04a · 桥接层回放迁移与最小脱敏夹具](https://github.com/midcash/travel-regulation-rebuild/issues/15)
+- [M03b · 真实三亚验收及同批删除旧引擎与 domain 旧合同](https://github.com/midcash/travel-regulation-rebuild/issues/28)
+- [M04b · 完整 API/SSE 端到端测试与改口预算校准](https://github.com/midcash/travel-regulation-rebuild/issues/29)
 - [B01 · 按当前查询交付](https://github.com/midcash/travel-regulation-rebuild/issues/16)
 - [B02 · 只追问当前必要信息](https://github.com/midcash/travel-regulation-rebuild/issues/17)
 - [B03 · 有理由的推荐](https://github.com/midcash/travel-regulation-rebuild/issues/18)

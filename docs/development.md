@@ -35,4 +35,4 @@ python -X utf8 -m unittest discover -s verification/pi-step0 -p test_contracts.p
 
 保留 [第 0 步报告](pi-step0-report.md)。机器结果移到忽略的 artifacts/pi-step0/pi-step0-results.json，报告脚本也写入该处；新克隆可用 git show legacy-pre-pi:docs/pi-step0-results.json 查原始结果。旧归档、HIL 说明、回归基线和前置条件也保存在标签中。
 
-正式切换为一个完整批次：接通 Node、桥接、SQLite、API 与成果区，真实三亚通过，随后同批删除旧引擎及相关测试，再按 B01–B12 逐项推进。replay.py 与必要历史夹具迁至 tests/e2e/ 后删除 experiments/。依赖引用、API、表结构、验收与回滚统一见迁移方案。
+正式接入拆为 M01/M02、M03a 接口与成果区、M04a 桥接回放、M04b API/SSE 与计量、M03b 真实三亚及同批删除。M03b 完成前不切换默认入口；B01–B12 按实际依赖并行推进。旧 HIL 仅本地测试数据，不做历史投影，不修改、不删除旧表。replay.py 与最小脱敏夹具迁至 tests/e2e/ 后删除 experiments/。预算含缓存命中输入，核对来源见 [预算审计](pi-budget-audit.md)。当前等待用户审阅确认，不开始 M01，工单均保持 needs-triage。
