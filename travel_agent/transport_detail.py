@@ -1,7 +1,7 @@
 """Resolve detail queries exclusively from this run's observed candidates."""
 from datetime import datetime
 
-from .domain import CHINA
+from .facts import CHINA
 from .transport import query_transport
 
 

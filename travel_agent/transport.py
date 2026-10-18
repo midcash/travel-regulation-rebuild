@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import httpx
 
-from .domain import CHINA
+from .facts import CHINA
 from .supplier_wire import complete_sse, decode_wire, dumps, redact, unpack
 from .transport_summary import _flight_summary, _train_summary, _is_high_speed
 

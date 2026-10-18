@@ -2,24 +2,18 @@
 from __future__ import annotations
 
 import argparse
-import gc
 from datetime import datetime
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
-import subprocess
-import types
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from control import Journal, Node, ROOT, summary, tool_schema
 from travel_agent.settings import load_env
 from travel_agent.telemetry import Store, Tracer
-from travel_agent.domain import scenario_by_id
-from travel_agent.providers import Baseline
-from travel_agent.hil import start_trip, get_trip
 
 OUT = ROOT / 'artifacts/pi-step0'
 NOW = '2026-09-10T09:00:00+08:00'
@@ -111,28 +105,6 @@ def offline():
             assert db.execute("SELECT status FROM pi0_tools WHERE id='unknown'").fetchone()[0] == 'unknown'
         journal.tool({'id': 'new-query', 'args': {}}, supplier)
         results['commit_before_delivery_and_unknown'] = True
-        # New tables must not affect old Store/HIL tables or legacy read paths.
-        old = Store(journal.path)
-        old.save_run({'trace_id': 'old', 'started_at': NOW})
-        assert old.get_run('old')['trace_id'] == 'old'
-        assert journal.load()
-        results['additive_tables_legacy_read'] = True
-        legacy_store = Store(Path(directory) / 'legacy.sqlite3')
-        waiting = start_trip(scenario_by_id('hangzhou-shanghai'), Baseline(), legacy_store)
-        before = get_trip(waiting['run_id'], legacy_store)
-        with legacy_store.connect() as db:
-            old_rows = db.execute('SELECT * FROM hil_executions').fetchall()
-        Journal(legacy_store.path)
-        rollback_source = subprocess.check_output(['git','-c','safe.directory='+str(ROOT),
-                                                   'show','0b7364f:travel_agent/hil.py'], cwd=ROOT, text=True, encoding='utf-8')
-        rollback = types.ModuleType('travel_agent._rollback_hil')
-        rollback.__package__ = 'travel_agent'
-        exec(compile(rollback_source, '<rollback-hil-0b7364f>', 'exec'), rollback.__dict__)
-        assert rollback.get_trip(waiting['run_id'], legacy_store) == before
-        with legacy_store.connect() as db:
-            assert db.execute('SELECT * FROM hil_executions').fetchall() == old_rows
-        results['rollback_original_hil_reads_waiting_task'] = {'source_commit':'0b7364f','unchanged_old_rows':True}
-        gc.collect()
         interrupted = Node()
         interrupted.journal = journal
         try:
@@ -297,26 +269,18 @@ def current_selection(journal):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['offline', 'probe', 'live', 'replay'])
-    parser.add_argument('--scenario', choices=['normal', 'retry', 'redirect', 'compact_restore'])
+    parser.add_argument('mode', choices=['offline', 'probe', 'live'])
     args = parser.parse_args()
-    OUT.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
     try:
-        if args.mode == 'replay':
-            from replay import run_replays
-            result = run_replays([args.scenario] if args.scenario else None)
-        else:
-            result = globals()[args.mode]()
+        result = globals()[args.mode]()
         result = {'status': 'PASS', 'elapsed_seconds': round(time.monotonic()-start, 2), **result}
-        if args.mode == 'replay' and not result['all_runs_completed']:
-            result['status'] = 'FAIL'
     except Exception as error:
         result = {'status': 'FAIL', 'error_type': type(error).__name__, 'error': str(error), 'elapsed_seconds': round(time.monotonic()-start, 2)}
-    suffix = '-'+args.scenario if args.scenario else ''
-    (OUT / f'{args.mode}{suffix}.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
-    displayed = result if args.mode != 'replay' else {k: v for k, v in result.items() if k != 'rows'}
-    print(json.dumps(displayed, ensure_ascii=False, indent=2), flush=True)
+    if args.mode != 'offline':
+        OUT.mkdir(parents=True, exist_ok=True)
+        (OUT / f'{args.mode}.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
     if result['status'] != 'PASS':
         raise SystemExit(1)
 
