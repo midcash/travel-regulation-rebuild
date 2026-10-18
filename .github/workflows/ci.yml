@@ -30,15 +30,8 @@ jobs:
       - name: Install Python package
         run: python -m pip install -e ".[otel]"
 
-      - name: Python tests
-        run: python -B -X utf8 -m unittest discover -s tests -v
+      - name: Install locked Pi dependencies
+        run: npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
 
-      - name: Node UI tests
-        run: |
-          node tests/agent_workspace_ui.test.cjs
-          node tests/hil_ui.test.cjs
-          node tests/request_ui.test.cjs
-
-      # verification/pi-step0/test_contracts.py replays experiments/experiment_2_hil_tools/results/*,
-      # which is a local-only record (not in the repo). Re-enable this step after #15 (M04a)
-      # moves the minimal redacted fixtures into tests/e2e/.
+      - name: Offline tool and Pi protocol checks
+        run: python -B -X utf8 scripts/check.py

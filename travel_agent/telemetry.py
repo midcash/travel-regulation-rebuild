@@ -27,8 +27,6 @@ class Store:
                     span_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, started_at TEXT NOT NULL,
                     payload TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS spans_trace ON spans(trace_id);
-                CREATE TABLE IF NOT EXISTS evaluations (
-                    id TEXT PRIMARY KEY, started_at TEXT NOT NULL, payload TEXT NOT NULL);
             """)
 
     @contextmanager
@@ -50,11 +48,6 @@ class Store:
             db.execute("INSERT INTO spans VALUES (?, ?, ?, ?)",
                        (item["span_id"], item["trace_id"], item["started_at"], json.dumps(item)))
 
-    def save_evaluation(self, item):
-        with self.connect() as db:
-            db.execute("INSERT INTO evaluations VALUES (?, ?, ?)",
-                       (item["id"], item["started_at"], json.dumps(item, ensure_ascii=False)))
-
     def list_runs(self, limit=200):
         with self.connect() as db:
             return [json.loads(row[0]) for row in db.execute(
@@ -70,12 +63,6 @@ class Store:
                 "SELECT payload FROM spans WHERE trace_id=? ORDER BY started_at", (trace_id,))]
             return result
 
-    def list_evaluations(self):
-        with self.connect() as db:
-            return [json.loads(x[0]) for x in db.execute(
-                "SELECT payload FROM evaluations ORDER BY started_at DESC LIMIT 30")]
-
-
 class Tracer:
     def __init__(self, store, otel=None):
         self.store = store
@@ -85,11 +72,6 @@ class Tracer:
 
     @contextmanager
     def span(self, name, **attributes):
-        """
-            职责：创建用于日志服务的上下文管理器
-                1. 创建记录、记录开始时间、放入队列
-                2.
-        """
         record = {"trace_id": self.trace_id, "span_id": uuid.uuid4().hex[:16],
                   "parent_span_id": self.stack[-1] if self.stack else None,
                   "name": name, "started_at": utcnow(), "status": "ok", "attributes": attributes}
@@ -136,5 +118,4 @@ def make_otel(endpoint):
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     provider = TracerProvider(resource=Resource.create({"service.name": "travel-agent-lab"}))
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, timeout=5)))
-    # 这里的 BatchSpanProcessor 负责收集已结束的 span、批量处理；OTLPSpanExporter 负责通过 HTTP 将数据发送到指定的 endpoint。所以你没有在 span() 中看到显式的发送或返回代码——这些由 SDK 接手。
     return provider.get_tracer("travel-agent", "0.1.0"), provider

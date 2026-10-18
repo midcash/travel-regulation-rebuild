@@ -8,7 +8,7 @@ import time
 
 import httpx
 
-from .domain import CHINA
+from .facts import CHINA
 from .supplier_wire import dumps, loads, redact
 from .transport import MAX_BYTES
 

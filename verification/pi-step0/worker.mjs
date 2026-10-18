@@ -28,7 +28,7 @@ const ai=await import('@earendil-works/pi-ai');
 const emit=value=>process.stdout.write(JSON.stringify(value)+'\n');
 const pending=new Map();
 const toolStarts=new Map();
-let session,manager,runtime,faux,commandId,commandKind,conditionVersion=1,modelCalls=0,toolRequests=0;
+let session,manager,runtime,faux,commandId,commandKind,conditionVersion=1,modelCalls=0,toolRequests=0,cancelled=false;
 function snapshot(){return [manager.getHeader(),...manager.getEntries()];}
 function requestTool(toolCallId,name,args,signal){
   const id=`${manager.getSessionId()}:${toolCallId}`;toolRequests++;
@@ -60,6 +60,7 @@ async function initialize(c){
   if(!c.fake&&process.env.DEEPSEEK_BASE_URL)model={...model,baseUrl:process.env.DEEPSEEK_BASE_URL};
   const stream=runtime.streamSimple.bind(runtime);
   runtime.streamSimple=(m,ctx,opts)=>{
+    if(cancelled)throw new Error('Run cancelled; no new model request');
     const call=++modelCalls;
     if(call>(c.maxCalls||24))throw new Error('Step0 model call safety limit');
     emit({type:'model_start',call,commandId,model:m.id,conditionVersion,operation:commandKind,at:Date.now()});
@@ -133,6 +134,7 @@ async function handle(c){
     let result;
     if(c.op==='init')result=await initialize(c);
     else if(c.op==='prompt'){
+      cancelled=false;
       commandId=c.id;
       commandKind='prompt';
       conditionVersion=c.conditionVersion;
@@ -140,8 +142,9 @@ async function handle(c){
       await session.prompt(c.text);await session.waitForIdle();
       result={entries:snapshot(),modelCalls,toolRequests};
     }else if(c.op==='steer'){conditionVersion=c.conditionVersion;await session.steer(c.text);emit({type:'control_event',operation:'steer'});result={queued:true};}
-    else if(c.op==='cancel'){await session.abort();emit({type:'control_event',operation:'cancel'});result={cancelled:true,entries:snapshot()};}
+    else if(c.op==='cancel'){cancelled=true;await session.abort();emit({type:'control_event',operation:'cancel'});result={cancelled:true,entries:snapshot()};}
     else if(c.op==='compact'){
+      cancelled=false;
       commandId=c.id;
       commandKind='compact';
       if(faux)faux.setResponses([ai.fauxAssistantMessage('Goal: retain hotel A. Evidence: evidence-hotel-A. User selected A; no booking.')]);
@@ -157,7 +160,7 @@ async function handle(c){
       for(const p of [path.join(process.env.STEP0_REPO,'AGENTS.md'),path.join(process.env.STEP0_REPO,'.agents')])try{fs.readFileSync(p);}catch(e){if(e.message==='Forbidden project resource access')rejected++;}
       result={accessCount:before,negativeRejected:rejected,accesses:accesses.slice(0,before),sessionFile:session.sessionFile};
     }else if(c.op==='crash')process.exit(17);
-    else if(c.op==='shutdown'){await session?.abort();session?.dispose();emit({type:'done',id:c.id,result:{closed:true}});process.exit(0);}
+    else if(c.op==='shutdown'){cancelled=true;await session?.abort();session?.dispose();emit({type:'done',id:c.id,result:{closed:true}});process.exit(0);}
     else throw new Error('Unknown operation');
     emit({type:'done',id:c.id,result});
   }catch(e){emit({type:'failed',id:c.id,error:String(e.message)});}

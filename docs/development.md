@@ -1,38 +1,39 @@
-# 开发说明
+# 开发与测试
 
-当前仍为旧 Python 实现；[Pi 迁移方案](pi-migration-plan.md) 是下一批实施依据，[product-behavior.md](product-behavior.md) 是目标行为。清理前提交已打 legacy-pre-pi 标签。
+当前仅保留真实工具、政策资源、本地 Trace 与 Pi 接入探针；没有产品网页、HTTP 服务或 CLI。骨架交付边界见 [下一张工单](skeleton-issue.md)，业务验收以 [B01–B12](product-behavior.md) 为准。清理后的工具合同仍有局部旧限制，见 [tool-contracts.md](tool-contracts.md)，不能把这些限制作为新业务要求。
 
-## 当前代码
+## 一条检查命令
 
-- main.py / start-local.ps1 调用 travel_agent/cli.py；启动脚本仅保留端口，固定 DeepSeek。
-- agent.py 的 TripExecution / plan_trip 为旧循环，hil.py / human.py 为旧人工交互，核心需求修改仍要求新任务。
-- server.py / web/ 为本机工作台，保留同源、Host 和客户端头校验，无多用户身份系统。
-- domain.py 包含请求规范化与旧方案合同，request_parser.py 为有限规则解析。
-- real_tools.py 分派真实工具，transport*.py、stays.py、places.py、route.py、supplier_wire.py 和 regulation_policy.py 为供应商/政策适配；现有语义见 [工具合同](tool-contracts.md)。
-- telemetry.py 保存 SQLite Trace，可选 OTLP；evaluation.py / evals/ 是待移除的旧演示回归。
-
-主包不依赖实验包。暂留实验目录仅被第 0 步历史回放读取，不是新实现规范。
-
-## 运行与验证
-
-安装启动见 [README](../README.md)。旧 CLI run/eval/scenarios、baseline/demo 和网页控件仍因依赖暂留，将与旧引擎同批删除。run 和 HTTP 旧入口默认 demo，不能作为真实验收。SQLite 默认 artifacts/observability.sqlite3，不删除或改写用户记录。
+安装步骤见 [README](../README.md)。仓库根目录运行 `python scripts/check.py`，失败返回非零退出码；CI 使用相同命令。它依次执行：
 
 ```powershell
-python -B -m unittest discover -s tests -v
-node tests/agent_workspace_ui.test.cjs
-node tests/hil_ui.test.cjs
-node tests/request_ui.test.cjs
-python -X utf8 -m unittest discover -s verification/pi-step0 -p test_contracts.py -v
+python -B -X utf8 -m unittest discover -s tests -v
+python -B -X utf8 -m unittest discover -s verification/pi-step0 -p test_portable.py -v
 ```
 
-使用有效 Python 3.11+。第 0 步合同测试需要先在 verification/pi-step0/ 安装锁定的 Node 依赖。上述检查不需在线模型/供应商；第 0 步 live/probe/replay 会调用真实模型并收费，不能混入默认测试。假模型只用于自动测试。
+`tests/test_tools_*.py` 直接调用真实适配器，以合成 HTTP 替代供应商；覆盖交通/详情、酒店/详情、地点与路线、政策哈希、证据、金额精度、失败、重试、脱敏及本地 Trace。没有复用旧 Agent loop、HIL 或私有历史夹具。`tests/suppliers.py` 是合成线协议数据，不是历史线上记录。
 
-旧预算仍是模型 10 次、工具 12 次、24,000 token、180 秒活跃时间、单模型 45 秒，HIL 默认 3 次。这些仅是待删除旧代码的回归值，不是新 Pi 要求。Pi 开发控制改为完整计量与熔断（模型30/工具50/累计50万token/活跃10分钟/单模型45秒），项目每日50元，金额unknown时每日500万token；以迁移方案决策记录为准，尚未实施。
+Pi portable 测试经 Python→实际 Node 子进程→锁定 Pi SDK→SQLite，覆盖流式消息、工具提交幂等、取消/强杀、压缩恢复、未知用量和资源隔离。验证库均在系统临时目录；默认检查不读 `.env`、本机历史运行数据或在线供应商。SDK 的 faux token 不代表真实账单。
 
-回归用固定时钟/日期，页面示例用服务端上海时间加三天。每条新消息捕获上海时间、工具执行再次检查过去日期，是新链路必须实现的行为。历史解释不改写原查询时间。
+## 可控测试边界
 
-## 留存与迁移
+`RealTools` 可注入 `request`、`current_date`、`evidence_dir`、`transport_http`，`execute` 可指定超时。白盒检查关注解析、状态、金额与错误分支；工具黑盒检查只观察参数、返回值、HTTP 次数和证据。供应商连接使用 `httpx.MockTransport`，临时目录和 SQLite 自动关闭后清理。不要把真实工具本身 mock 掉。
 
-保留 [第 0 步报告](pi-step0-report.md)。机器结果移到忽略的 artifacts/pi-step0/pi-step0-results.json，报告脚本也写入该处；新克隆可用 git show legacy-pre-pi:docs/pi-step0-results.json 查原始结果。旧归档、HIL 说明、回归基线和前置条件也保存在标签中。
+`current_date` 目前是调用者提供的日期快照，尚不能证明跨午夜重新检查；工具历史也只是运行内快照，尚无产品会话数据库或跨会话授权边界。正式骨架需要可注入时钟，并在每次供应商执行前重读当前日期。
 
-正式接入拆为 M01/M02、M03a 接口与成果区、M04a 桥接回放、M04b API/SSE 与数据收集、M03b 真实三亚及同批删除。M03b 完成前不切换默认入口；B01–B12 按实际依赖并行推进。旧 HIL 仅本地测试数据，不做历史投影，不修改、不删除旧表。replay.py 与最小脱敏夹具迁至 tests/e2e/ 后删除 experiments/。预算含缓存命中输入，核对来源见 [预算审计](pi-budget-audit.md)。正式预算由 B01–B12 后的预算优化工单设定，迁移阶段不设预算门禁。
+## 端到端还缺什么
+
+- 正式 Python 会话服务、按会话隔离的 Node 运行时与持久化事务；进程探针不是这些模块的实现。
+- 正式 HTTP/SSE 的启动/关闭、临时端口/数据库、模型边界替身、失败与重连测试。
+- 新页面及浏览器测试依赖、安装步骤、可访问定位、服务启停夹具和失败截图/Trace；现阶段不保留空壳浏览器测试。
+- 独立真实验收命令：当次未来日期、真实 DeepSeek/供应商、页面输入到成果区及来源证据；真实凭证不足或服务不可用须写未验收，不能拿离线通过代替。
+
+上述能力应随 [骨架工单](skeleton-issue.md)交付；完整业务仍需逐项核对 B01–B12。测试权限可以让 Agent 执行检查，不能替代缺失的运行链路与验收依据。
+
+## 真实模型探针
+
+仅在核对 SDK 接入、计量或故障时按 [探针说明](../verification/pi-step0/README.md)显式执行。`probe/live` 加载现有 `.env` 并收费，`live` 需 `python -m pip install -e ".[otel]"`；只调用模型和合成工具，不调用真实差旅供应商，也不证明产品真实端到端。正式运行安全和用量上限见 [Pi 决策](pi-migration-plan.md)。
+
+## 清理与恢复
+
+清理前提交为 `30619f0dc5debbb64a85a6c21c7d4795a4baaecf`，本地标签 `codex/pre-skeleton-cleanup-20261018`。旧演示/评测、HIL、页面、实验源码及通用技能副本均从工作树移除；不读取、不删除忽略的运行数据或依赖。不做旧 HIL 历史投影，不修改旧表。更早测量见 [精简后的第 0 步记录](pi-step0-report.md)，完整旧材料通过 Git 查询。
