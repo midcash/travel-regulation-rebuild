@@ -1,0 +1,77 @@
+[
+  {
+    "id": "hangzhou-shanghai",
+    "label": "杭州 → 上海 · 正常方案",
+    "request": {
+      "origin": "杭州",
+      "destination": "上海",
+      "meeting_location": "东方明珠塔",
+      "meeting_at": "2026-09-12T08:00+08:00"
+    }
+  },
+  {
+    "id": "retry-once",
+    "label": "城际工具首次超时 · 重试恢复",
+    "request": {
+      "origin": "杭州",
+      "destination": "上海",
+      "meeting_location": "东方明珠塔",
+      "meeting_at": "2026-09-12T08:00+08:00"
+    },
+    "faults": {
+      "search_intercity": 1
+    }
+  },
+  {
+    "id": "hotel-over-budget",
+    "label": "酒店超过政策上限",
+    "request": {
+      "origin": "杭州",
+      "destination": "上海",
+      "meeting_location": "东方明珠塔",
+      "meeting_at": "2026-09-12T08:00+08:00"
+    },
+    "overrides": {
+      "hotel_price_cny": 650
+    }
+  },
+  {
+    "id": "late-arrival",
+    "label": "市内交通到达晚于会议",
+    "request": {
+      "origin": "杭州",
+      "destination": "上海",
+      "meeting_location": "东方明珠塔",
+      "meeting_at": "2026-09-12T08:00+08:00"
+    },
+    "overrides": {
+      "late_arrival": true
+    }
+  },
+  {
+    "id": "missing-hotel",
+    "label": "酒店无可用数据",
+    "request": {
+      "origin": "杭州",
+      "destination": "上海",
+      "meeting_location": "东方明珠塔",
+      "meeting_at": "2026-09-12T08:00+08:00"
+    },
+    "overrides": {
+      "missing_hotel": true
+    }
+  },
+  {
+    "id": "tool-timeout",
+    "label": "城际工具持续超时",
+    "request": {
+      "origin": "杭州",
+      "destination": "上海",
+      "meeting_location": "东方明珠塔",
+      "meeting_at": "2026-09-12T08:00+08:00"
+    },
+    "faults": {
+      "search_intercity": 2
+    }
+  }
+]

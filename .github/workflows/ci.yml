@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python package
+        run: python -m pip install -e ".[otel]"
+
+      - name: Python tests
+        run: python -B -X utf8 -m unittest discover -s tests -v
+
+      - name: Node UI tests
+        run: |
+          node tests/agent_workspace_ui.test.cjs
+          node tests/hil_ui.test.cjs
+          node tests/request_ui.test.cjs
+
+      # verification/pi-step0/test_contracts.py replays experiments/experiment_2_hil_tools/results/*,
+      # which is a local-only record (not in the repo). Re-enable this step after #15 (M04a)
+      # moves the minimal redacted fixtures into tests/e2e/.

@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+artifacts/
+.env
+.env.*
+!.env.example
+build/
+dist/
+.idea/
+.tmp/
+node_modules/
+
+# Downloaded upstream repositories and generated experiment state.
+/experiments/experiment_5_agent_notes_lab/*/source/*
+!/experiments/experiment_5_agent_notes_lab/*/source/README.md
+/experiments/experiment_5_agent_notes_lab/**/workspace/
+/experiments/experiment_5_agent_notes_lab/**/mailbox/
