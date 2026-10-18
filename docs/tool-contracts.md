@@ -1,6 +1,6 @@
 # 真实工具合同与当前限制
 
-`real_tools.REAL_SCHEMAS` 暴露七项能力：`get_policy_snapshot`、`search_transport`、`get_transport_detail`、`search_stays`、`get_stay_detail`、`resolve_place`、`calculate_route`。旧 `finish`、固定四段成果合同和演示工具已删除；当前没有自动规划循环。
+`real_tools.REAL_SCHEMAS` 暴露六项能力：`search_transport`、`get_transport_detail`、`search_stays`、`get_stay_detail`、`resolve_place`、`calculate_route`。旧 `finish`、固定四段成果合同和演示工具已删除；当前没有自动规划循环。
 
 ## 保留的能力
 
@@ -9,8 +9,6 @@
 交通/住宿详情只接受同一工具实例已返回的候选，沿用原查询的身份、城市、日期等实际参数，不能在详情参数中改条件。重复查询保存独立调用和证据；仅相同实际查询的失败后再查才累计重试。没有供应商自动重试或假数据回退。
 
 JSON/SSE 解析保留十进制精度；金额小数用字符串，未知为 null，不补零，不用部分报价推算完整总价。住宿默认 1 成人、1 间房；不把查询日期当成实际办理时间。工具使用受控配置、超时、响应大小限制和脱敏；公开错误不输出请求异常链。证据落盘失败保留供应商结果及错误，不能宣称证据已保存。
-
-政策工具读取随包的 `travel_agent/policies/浙江省机关工作人员差旅费管理规定.md`，返回条款索引及原文字节 SHA-256。当前哈希为 `14e89ab8c38fa908dd9652cff0ba5310dd491f6d070736c70a27ce418555c49d`。它是运行资源，不是默认适用于所有用户的制度，也不作合规认证。
 
 地点保留 GCJ-02 坐标、候选与来源、不确定原因；供应商排序不等于用户确认。路线的估时属于查询当时的估计，通行费与出租车估价分别表达；未知费用保持未知。
 

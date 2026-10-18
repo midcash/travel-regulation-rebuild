@@ -8,15 +8,16 @@ from .transport_detail import get_transport_detail
 from .stays import search_stays, get_stay_detail
 from .places import resolve_place
 from .route import calculate_route
-from .facts import PACKAGE, fingerprint
-from .regulation_policy import RegulationPolicyError, load_regulation_policy
+from .facts import fingerprint
+
+
 def function(name, description, properties, required=()):
     return {"type": "function", "function": {"name": name, "description": description,
         "parameters": {"type": "object", "properties": properties,
                        "required": list(required), "additionalProperties": False}}}
 
 
-REAL_SCHEMAS = [function("get_policy_snapshot", "读取浙江省差旅规定原文快照及来源哈希；不作合规认证。", {}), function("search_transport", "搜索真实航班或火车；返回供应商时刻、请求约束检查及证据，不代表完整方案。", {
+REAL_SCHEMAS = [function("search_transport", "搜索真实航班或火车；返回供应商时刻、请求约束检查及证据，不代表完整方案。", {
     "mode": {"type": "string", "enum": ["flight", "train"]},
     "origin": {"type": "string"}, "destination": {"type": "string"},
     "departure_date": {"type": "string", "description": "YYYY-MM-DD, Asia/Shanghai"},
@@ -51,8 +52,7 @@ class RealTools:
         for key in self.STATE_FIELDS:
             setattr(self, key, copy.deepcopy(state[key]))
 
-    def __init__(self, trace_id, policy_path=None, *, request=None, current_date=None, evidence_dir=None, transport_http=None):
-        self.policy_path = Path(policy_path) if policy_path is not None else PACKAGE / "policies/浙江省机关工作人员差旅费管理规定.md"
+    def __init__(self, trace_id, *, request=None, current_date=None, evidence_dir=None, transport_http=None):
         self.trace_id = trace_id
         self.calls = 0
         self.http_requests = 0
@@ -102,19 +102,4 @@ class RealTools:
                     "data": result["data"], "supplier_evidence": {k: v for k, v in source_record.items() if k != "wire_text"}}
             self.history[call_id] = result
             return result
-        if name != "get_policy_snapshot" or not isinstance(args, dict) or args:
-            raise ValueError("Unknown tool or unexpected arguments")
-        result = {"call_id": call_id, "tool": name, "status": "ok", "data": None,
-                  "evidence_refs": [], "warnings": []}
-        try:
-            result["data"] = load_regulation_policy(self.policy_path)
-        except (RegulationPolicyError, OSError, ValueError):
-            result.update(status="error", error={"type": "PolicyReadError",
-                "message": "政策文件缺失、不可读或格式无效；未读取替代政策。", "retryable": False})
-        else:
-            identifier = f"{call_id}:policy"
-            result["evidence_refs"] = [identifier]
-            self.seen[identifier] = {"id": identifier, "source": name, "call_id": call_id,
-                                    "data": result["data"]}
-        self.history[call_id] = result
-        return result
+        raise ValueError("Unknown tool or unexpected arguments")

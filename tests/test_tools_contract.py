@@ -38,12 +38,13 @@ class ToolsCase(unittest.TestCase):
 
 
 class ToolsContract(ToolsCase):
-    def test_registry_exposes_only_seven_supplier_tools_and_rejects_old_finish(self):
+    def test_registry_exposes_only_six_supplier_tools_and_rejects_removed_tools(self):
         self.assertEqual({s["function"]["name"] for s in REAL_SCHEMAS}, {
-            "get_policy_snapshot", "search_transport", "get_transport_detail", "search_stays",
+            "search_transport", "get_transport_detail", "search_stays",
             "get_stay_detail", "resolve_place", "calculate_route"})
-        with self.assertRaises(ValueError):
-            self.call("finish", {})
+        for name in ("finish", "get_policy_snapshot"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                self.call(name, {})
         self.assertEqual(self.requests, [])
 
     def test_flight_search_preserves_facts_unknown_price_and_evidence(self):
