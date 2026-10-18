@@ -9,7 +9,7 @@ import unittest
 
 from travel_agent.conversations import (
     SHANGHAI, ConversationBusy, ConversationStore, MessageConflict, NotFound, RunNotActive,
-    ToolCallConflict, ToolOutcomeUnknown)
+    SchemaMismatch, ToolCallConflict, ToolOutcomeUnknown)
 
 
 class Clock:
@@ -418,6 +418,102 @@ class Review(StoreCase):
         other_id, other_run = self.start(message_id="m-other")
         with self.assertRaises(NotFound):
             self.store.save_entries(conversation_id, [{"id": "e3"}], run_id=other_run)
+
+
+class ReviewRound2(StoreCase):
+    """Cases added after the second review of PR #36."""
+
+    def second_run(self, conversation_id, first_run, message_id="m2"):
+        self.store.finish_run(first_run, "completed")
+        return self.store.submit_message(conversation_id, message_id, "再查一次")["run"]["id"]
+
+    def test_entries_keep_the_run_that_first_wrote_them(self):
+        conversation_id, first = self.start()
+        self.store.save_entries(conversation_id, [{"id": "e1"}, {"id": "e2"}], run_id=first)
+        second = self.second_run(conversation_id, first)
+        self.store.save_entries(conversation_id, [{"id": "e1"}, {"id": "e2", "v": 2}, {"id": "e3"}],
+                                run_id=second)
+        self.assertEqual([(r["entry"]["id"], r["run_id"])
+                          for r in self.store.load_entries(conversation_id, with_run_id=True)],
+                         [("e1", first), ("e2", first), ("e3", second)])
+
+    def test_assistant_message_id_cannot_be_reused_by_a_later_run(self):
+        conversation_id, first = self.start()
+        self.store.add_assistant_message(first, "好的", message_id="a1")
+        second = self.second_run(conversation_id, first)
+        with self.assertRaises(MessageConflict):
+            self.store.add_assistant_message(second, "好的", message_id="a1")
+        with self.assertRaises(MessageConflict):
+            self.store.finish_run(second, "completed", reply="好的", reply_id="a1")
+        self.assertEqual(self.store.run_status(second), "running")
+        self.assertEqual(self.store.add_assistant_message(first, "好的", message_id="a1"), "a1")
+
+    def test_failed_reply_leaves_the_run_running(self):
+        conversation_id, run_id = self.start()
+        before = self.store.events_after(conversation_id)
+        with self.assertRaises(MessageConflict):  # m1 is the user message
+            self.store.finish_run(run_id, "completed", reply="三亚航班如下", reply_id="m1")
+        self.assertEqual(self.store.run_status(run_id), "running")
+        self.assertEqual(self.store.events_after(conversation_id), before)
+        self.assertEqual(len(self.store.get_state(conversation_id)["messages"]), 1)
+
+    def test_retrying_finish_with_a_reply_writes_it_once(self):
+        conversation_id, run_id = self.start()
+        for _ in range(2):
+            self.assertEqual(self.store.finish_run(run_id, "completed", reply="三亚航班如下"), "completed")
+        self.assertEqual([m["role"] for m in self.store.get_state(conversation_id)["messages"]],
+                         ["user", "assistant"])
+        self.assertEqual(self.event_types(conversation_id).count("run_finished"), 1)
+
+    def test_blank_final_reply_finishes_the_run_without_a_message(self):
+        conversation_id, run_id = self.start()
+        self.assertEqual(self.store.finish_run(run_id, "completed", reply="   "), "completed")
+        self.assertEqual(len(self.store.get_state(conversation_id)["messages"]), 1)
+
+    def test_evidence_foreign_key_is_enforced_per_run_and_call(self):
+        conversation_id, first = self.start()
+        self.store.begin_tool_call(first, "call1", "search_transport", {})
+        second = self.second_run(conversation_id, first)
+
+        def insert(run_id, call_id):
+            with closing(sqlite3.connect(self.path)) as db, db:
+                db.execute("PRAGMA foreign_keys=ON")
+                db.execute("INSERT INTO pi_evidence VALUES ('ev-x', ?, ?, ?, 't', '{}', NULL)",
+                           (conversation_id, run_id, call_id))
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert(first, "no-such-call")
+        with self.assertRaises(sqlite3.IntegrityError):  # call1 exists, but only in the first run
+            insert(second, "call1")
+        insert(first, "call1")
+
+    def test_result_cannot_carry_its_own_evidence_ids(self):
+        conversation_id, run_id = self.start()
+        self.store.begin_tool_call(run_id, "call1", "search_transport", {})
+        with self.assertRaises(ValueError):
+            self.store.complete_tool_call(run_id, "call1", {"status": "ok", "evidence_ids": ["x"]})
+        self.assertEqual(self.call_status(run_id, "call1"), "pending")
+        stored = self.store.complete_tool_call(run_id, "call1", {"status": "ok"}, [{"facts": {"a": 1}}])
+        self.assertEqual(self.store.complete_tool_call(run_id, "call1", {"status": "ok"}, [{"facts": {"a": 2}}]),
+                         stored)  # a redelivery is matched on the result only
+
+    def test_schema_version_is_stamped_and_unversioned_pi_tables_are_refused(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            self.assertEqual(db.execute("SELECT value FROM pi_meta WHERE key='schema_version'").fetchone()[0], "1")
+        ConversationStore(self.path, clock=self.clock)  # reopening is fine
+        old = Path(self.folder.name) / "old.sqlite3"
+        with closing(sqlite3.connect(old)) as db, db:
+            db.execute("CREATE TABLE pi_conversations (id TEXT PRIMARY KEY)")
+        with self.assertRaises(SchemaMismatch):
+            ConversationStore(old, clock=self.clock)
+        with closing(sqlite3.connect(old)) as db:
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='pi_meta'").fetchone())
+        newer = Path(self.folder.name) / "newer.sqlite3"
+        ConversationStore(newer, clock=self.clock)
+        with closing(sqlite3.connect(newer)) as db, db:
+            db.execute("UPDATE pi_meta SET value='2'")
+        with self.assertRaises(SchemaMismatch):
+            ConversationStore(newer, clock=self.clock)
 
 
 if __name__ == "__main__":

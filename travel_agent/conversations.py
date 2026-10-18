@@ -21,6 +21,7 @@ SHANGHAI = timezone(timedelta(hours=8), "Asia/Shanghai")
 ACTIVE_RUN = ("running", "cancelling")
 FINAL_RUN = ("completed", "failed", "cancelled", "interrupted")
 MAX_ID_LENGTH = 128
+SCHEMA_VERSION = "1"
 # Pi usage fields that must all be present for a run's usage to count as complete.
 USAGE_KEYS = ("input", "output", "cacheRead", "cacheWrite")
 
@@ -48,6 +49,11 @@ class RunNotActive(StoreError):
 
 class ToolCallConflict(StoreError):
     code = "tool_call_conflict"
+
+
+class SchemaMismatch(StoreError):
+    """The file holds ``pi_*`` tables from an unversioned or newer schema; use a fresh file."""
+    code = "schema_mismatch"
 
 
 class ToolOutcomeUnknown(StoreError):
@@ -141,12 +147,43 @@ class ConversationStore:
         self.path = Path(path)
         self.clock = clock or (lambda: datetime.now(SHANGHAI))
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        db = sqlite3.connect(str(self.path), timeout=10)
+        db = sqlite3.connect(str(self.path), timeout=10, isolation_level=None)
         try:
             db.execute("PRAGMA journal_mode=WAL")
-            db.executescript(SCHEMA)
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                self._ensure_schema(db)
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+            db.execute("COMMIT")
         finally:
             db.close()
+
+    @staticmethod
+    def _ensure_schema(db):
+        """Create the ``pi_*`` tables once and stamp the version; refuse unknown layouts.
+
+        The version lives in ``pi_meta`` (not ``PRAGMA user_version``) so it never
+        collides with whatever else uses the file.
+        """
+        def table_exists(name):
+            return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                              (name,)).fetchone() is not None
+
+        if table_exists("pi_meta"):
+            row = db.execute("SELECT value FROM pi_meta WHERE key='schema_version'").fetchone()
+            if row is None or row[0] != SCHEMA_VERSION:
+                raise SchemaMismatch(f"unsupported schema version {row[0] if row else None!r}; "
+                                     "use a new database file")
+            return
+        if table_exists("pi_conversations"):
+            raise SchemaMismatch("pi_* tables without a schema version; use a new database file")
+        for statement in SCHEMA.split(";"):
+            if statement.strip():
+                db.execute(statement)
+        db.execute("CREATE TABLE pi_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        db.execute("INSERT INTO pi_meta VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
 
     # -- time ---------------------------------------------------------------
     def now(self):
@@ -244,12 +281,17 @@ class ConversationStore:
                 "active_run": self._run_dict(active) if active else None, "last_event_seq": last_seq}
 
     # -- messages and runs --------------------------------------------------
-    def _existing_message(self, db, message_id, conversation_id, role, text):
-        """Return the stored message for an idempotent retry, None if the ID is new."""
+    def _existing_message(self, db, message_id, conversation_id, role, text, run_id=None):
+        """Return the stored message for an idempotent retry, None if the ID is new.
+
+        With ``run_id`` the stored message must also belong to that run, so a reused
+        assistant ID in a later run is a conflict instead of a silently skipped write.
+        """
         row = db.execute("SELECT * FROM pi_messages WHERE id=?", (message_id,)).fetchone()
         if row is not None and (row["conversation_id"] != conversation_id or row["role"] != role
-                                or row["body"] != text):
-            raise MessageConflict("message ID already used with different content")
+                                or row["body"] != text
+                                or (run_id is not None and row["run_id"] != run_id)):
+            raise MessageConflict("message ID already used with different content or run")
         return row
 
     def _insert_message(self, db, conversation_id, message_id, role, text, run_id, stamp):
@@ -307,7 +349,8 @@ class ConversationStore:
         self._check_text(text)
         with self._tx() as db:
             run = self._run(db, run_id)
-            if self._existing_message(db, message_id, run["conversation_id"], "assistant", text) is not None:
+            if self._existing_message(db, message_id, run["conversation_id"], "assistant", text,
+                                      run_id) is not None:
                 return message_id
             if run["status"] != "running":
                 raise RunNotActive(f"run is {run['status']}")
@@ -353,12 +396,14 @@ class ConversationStore:
         """End a run; ``reply`` (the final assistant text) commits in the same transaction.
 
         A run whose cancel was requested always ends as ``cancelled`` and its reply is
-        dropped. Calls still pending become ``unknown``. Missing or partial ``usage`` is
+        dropped, and so is a blank one. Calls still pending become ``unknown``. Missing or partial ``usage`` is
         stored as incomplete, never as zero. Finishing an already-final run is a no-op
         that returns its existing status.
         """
         if status not in ("completed", "failed", "cancelled"):
             raise ValueError("status must be completed, failed or cancelled")
+        if isinstance(reply, str) and not reply.strip():
+            reply = None  # the model ended without text: finish the run, store no message
         if reply is not None:
             self._check_text(reply)
         reply_id = reply_id or _new_id("msg")
@@ -371,7 +416,8 @@ class ConversationStore:
                 status, reply = "cancelled", None
             stamp = self._stamp()
             if reply is not None:
-                if self._existing_message(db, reply_id, run["conversation_id"], "assistant", reply) is None:
+                if self._existing_message(db, reply_id, run["conversation_id"], "assistant", reply,
+                                          run_id) is None:
                     self._insert_message(db, run["conversation_id"], reply_id, "assistant", reply, run_id, stamp)
             self._end_run(db, run, status, stop_reason, self._usage_record(usage), stamp)
         return status
@@ -415,7 +461,8 @@ class ConversationStore:
         """Upsert SDK entries by ID; new IDs keep arrival order, updates keep their position.
 
         ``run_id`` tags entries so a restore can trim the tail of a cancelled or
-        interrupted run (for example a tool call without its result).
+        interrupted run (for example a tool call without its result). The first writer
+        keeps the tag: re-saving an entry from a later run never retags it.
         """
         with self._tx() as db:
             self._conversation(db, conversation_id)
@@ -427,7 +474,7 @@ class ConversationStore:
                 _check_id(entry_id, "entry id")
                 body = _dump(entry)
                 updated = db.execute(
-                    "UPDATE pi_entries SET body=?, run_id=COALESCE(?, run_id) WHERE conversation_id=? AND id=?",
+                    "UPDATE pi_entries SET body=?, run_id=COALESCE(run_id, ?) WHERE conversation_id=? AND id=?",
                     (body, run_id, conversation_id, entry_id)).rowcount
                 if not updated:
                     seq = db.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM pi_entries WHERE conversation_id=?",
@@ -484,9 +531,13 @@ class ConversationStore:
         the store generates evidence IDs and ``raw`` stays private. Returns the stored
         result (with ``evidence_ids``), or None when the run is no longer running or the
         call was already marked unknown: the result is archived but must not be handed
-        back to the model. Re-delivering an identical result returns the stored one.
+        back to the model. Re-delivering an identical result returns the stored one (only
+        the result is compared, not the evidence).
         """
-        return self._resolve_tool_call(run_id, call_id, "complete", dict(result), list(evidence))
+        result = dict(result)
+        if "evidence_ids" in result:
+            raise ValueError("result must not contain evidence_ids; the store adds it")
+        return self._resolve_tool_call(run_id, call_id, "complete", result, list(evidence))
 
     def fail_tool_call(self, run_id, call_id, code, message):
         return self._resolve_tool_call(run_id, call_id, "failed",
