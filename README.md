@@ -28,4 +28,4 @@ python -m venv .venv
 
 ## 开发
 
-[开发说明](docs/development.md) 记录当前入口与验证命令；[第 0 步报告](docs/pi-step0-report.md) 仅证明协议和运行前提，不代表真实供应商到页面验收。旧实现和本轮删除的资料由 `legacy-pre-pi` 标签保留。迁移验收由 [#11](https://github.com/midcash/travel-regulation-rebuild/issues/11) 及其子工单跟踪。
+[开发说明](docs/development.md) 记录当前入口与验证命令；[第 0 步报告](docs/pi-step0-report.md) 仅证明协议和运行前提，不代表真实供应商到页面验收。旧实现和清理时删除的资料由 `legacy-pre-pi` 标签保留。迁移验收由 [#11](https://github.com/midcash/travel-regulation-rebuild/issues/11) 及其子工单跟踪。

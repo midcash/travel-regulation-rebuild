@@ -27,7 +27,7 @@ python -X utf8 -m unittest discover -s verification/pi-step0 -p test_contracts.p
 
 使用有效 Python 3.11+。第 0 步合同测试需要先在 verification/pi-step0/ 安装锁定的 Node 依赖。上述检查不需在线模型/供应商；第 0 步 live/probe/replay 会调用真实模型并收费，不能混入默认测试。假模型只用于自动测试。
 
-旧预算仍是模型 10 次、工具 12 次、24,000 token、180 秒活跃时间、单模型 45 秒，HIL 默认 3 次。这些是旧回归值；Pi 的 12/20/30/80,000 初始预算和压缩/重试规则见迁移方案，尚未生效。
+旧预算仍是模型 10 次、工具 12 次、24,000 token、180 秒活跃时间、单模型 45 秒，HIL 默认 3 次。这些仅是待删除旧代码的回归值，不是新 Pi 要求。Pi 开发控制改为完整计量与熔断（模型30/工具50/累计50万token/活跃10分钟/单模型45秒），项目每日50元，金额unknown时每日500万token；以迁移方案决策记录为准，尚未实施。
 
 回归用固定时钟/日期，页面示例用服务端上海时间加三天。每条新消息捕获上海时间、工具执行再次检查过去日期，是新链路必须实现的行为。历史解释不改写原查询时间。
 
@@ -35,4 +35,4 @@ python -X utf8 -m unittest discover -s verification/pi-step0 -p test_contracts.p
 
 保留 [第 0 步报告](pi-step0-report.md)。机器结果移到忽略的 artifacts/pi-step0/pi-step0-results.json，报告脚本也写入该处；新克隆可用 git show legacy-pre-pi:docs/pi-step0-results.json 查原始结果。旧归档、HIL 说明、回归基线和前置条件也保存在标签中。
 
-正式接入拆为 M01/M02、M03a 接口与成果区、M04a 桥接回放、M04b API/SSE 与计量、M03b 真实三亚及同批删除。M03b 完成前不切换默认入口；B01–B12 按实际依赖并行推进。旧 HIL 仅本地测试数据，不做历史投影，不修改、不删除旧表。replay.py 与最小脱敏夹具迁至 tests/e2e/ 后删除 experiments/。预算含缓存命中输入，核对来源见 [预算审计](pi-budget-audit.md)。当前等待用户审阅确认，不开始 M01，工单均保持 needs-triage。
+正式接入拆为 M01/M02、M03a 接口与成果区、M04a 桥接回放、M04b API/SSE 与数据收集、M03b 真实三亚及同批删除。M03b 完成前不切换默认入口；B01–B12 按实际依赖并行推进。旧 HIL 仅本地测试数据，不做历史投影，不修改、不删除旧表。replay.py 与最小脱敏夹具迁至 tests/e2e/ 后删除 experiments/。预算含缓存命中输入，核对来源见 [预算审计](pi-budget-audit.md)。正式预算由 B01–B12 后的预算优化工单设定，迁移阶段不设预算门禁。

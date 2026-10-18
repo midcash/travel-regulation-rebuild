@@ -11,7 +11,7 @@ python -X utf8 verification/pi-step0/run.py live
 python -X utf8 verification/pi-step0/run.py replay
 ```
 
-`npm ci` 在本目录运行；Python 命令在仓库根目录运行。`offline` 使用 Pi 官方 faux provider，不需要密钥，也没有真实账单。`probe/live/replay` 加载仓库现有 `.env` 中的 DeepSeek 凭证，不输出密钥，会产生模型费用；型号固定为本轮账号确认可用的 `deepseek-flash`，推理强度 low。不调用真实差旅供应商，不自动降级到模拟模型。
+`npm ci` 在本目录运行；Python 命令在仓库根目录运行。`offline` 使用 Pi 官方 faux provider，不需要密钥，也没有真实账单。`probe/live/replay` 加载仓库现有 `.env` 中的 DeepSeek 凭证，不输出密钥，会产生模型费用；型号固定为第0步账号确认可用的 `deepseek-flash`，推理强度 low。不调用真实差旅供应商，不自动降级到模拟模型。
 
 Node 在空临时目录启动，HOME、USERPROFILE、APPDATA、LOCALAPPDATA、PI_CODING_AGENT_DIR 都被重定向，PI_OFFLINE 禁止目录刷新。SDK 资源加载器、设置、凭证和模型目录均为内存实现。文件探针在动态导入 SDK 前安装；这是回归检测，不是抵御任意恶意代码的系统沙箱。
 
