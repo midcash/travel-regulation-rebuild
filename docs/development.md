@@ -1,6 +1,6 @@
 # 开发与测试
 
-当前仅保留真实工具、政策资源、本地 Trace 与 Pi 接入探针；没有产品网页、HTTP 服务或 CLI。骨架交付边界见 [下一张工单](skeleton-issue.md)，业务验收以 [B01–B12](product-behavior.md) 为准。清理后的工具合同仍有局部旧限制，见 [tool-contracts.md](tool-contracts.md)，不能把这些限制作为新业务要求。
+当前仅保留真实工具、本地 Trace 与 Pi 接入探针；没有产品网页、HTTP 服务或 CLI。骨架交付边界见 [下一张工单](skeleton-issue.md)，业务验收以 [B01–B12](product-behavior.md) 为准。清理后的工具合同仍有局部旧限制，见 [tool-contracts.md](tool-contracts.md)，不能把这些限制作为新业务要求。
 
 ## 一条检查命令
 
@@ -11,7 +11,7 @@ python -B -X utf8 -m unittest discover -s tests -v
 python -B -X utf8 -m unittest discover -s verification/pi-step0 -p test_portable.py -v
 ```
 
-`tests/test_tools_*.py` 直接调用真实适配器，以合成 HTTP 替代供应商；覆盖交通/详情、酒店/详情、地点与路线、政策哈希、证据、金额精度、失败、重试、脱敏及本地 Trace。没有复用旧 Agent loop、HIL 或私有历史夹具。`tests/suppliers.py` 是合成线协议数据，不是历史线上记录。
+`tests/test_tools_*.py` 直接调用真实适配器，以合成 HTTP 替代供应商；覆盖交通/详情、酒店/详情、地点与路线、证据、金额精度、失败、重试、脱敏及本地 Trace。没有复用旧 Agent loop、HIL 或私有历史夹具。`tests/suppliers.py` 是合成线协议数据，不是历史线上记录。
 
 Pi portable 测试经 Python→实际 Node 子进程→锁定 Pi SDK→SQLite，覆盖流式消息、工具提交幂等、取消/强杀、压缩恢复、未知用量和资源隔离。验证库均在系统临时目录；默认检查不读 `.env`、本机历史运行数据或在线供应商。SDK 的 faux token 不代表真实账单。
 
