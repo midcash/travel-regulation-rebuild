@@ -36,6 +36,11 @@ class StoreCase(unittest.TestCase):
         submitted = self.store.submit_message(conversation["id"], message_id, text)
         return conversation["id"], submitted["run"]["id"]
 
+    def call_status(self, run_id, call_id):
+        with closing(sqlite3.connect(self.path)) as db:
+            return db.execute("SELECT status FROM pi_tool_calls WHERE run_id=? AND call_id=?",
+                              (run_id, call_id)).fetchone()[0]
+
     def event_types(self, conversation_id):
         return [e["type"] for e in self.store.events_after(conversation_id)]
 
@@ -143,7 +148,7 @@ class Tools(StoreCase):
         with self.assertRaises(ToolOutcomeUnknown):
             self.store.begin_tool_call(run_id, "call1", "search_transport", args)
         stored = self.store.complete_tool_call(
-            "call1", {"status": "ok", "count": 1},
+            run_id, "call1", {"status": "ok", "count": 1},
             [{"facts": {"flight": "MU1234"}, "raw": {"secret_field": "x"}, "fetched_at": "2099-03-01T09:00:01+08:00"}])
         [evidence_id] = stored["evidence_ids"]
         self.assertEqual(self.store.begin_tool_call(run_id, "call1", "search_transport", args), stored)
@@ -151,7 +156,7 @@ class Tools(StoreCase):
             self.store.begin_tool_call(run_id, "call1", "search_transport", {**args, "date": "2099-03-06"})
         evidence = self.store.get_evidence(conversation_id, evidence_id)
         self.assertEqual(evidence["facts"], {"flight": "MU1234"})
-        self.assertEqual(evidence["tool_call_id"], "call1")
+        self.assertEqual((evidence["run_id"], evidence["call_id"]), (run_id, "call1"))
         self.assertNotIn("raw", evidence)
         self.assertEqual(self.store.get_evidence(conversation_id, evidence_id, include_raw=True)["raw"],
                          {"secret_field": "x"})
@@ -162,7 +167,7 @@ class Tools(StoreCase):
         conversation_id, run_id = self.start()
         self.store.begin_tool_call(run_id, "call1", "search_transport", {"date": "2099-03-05"})
         with self.assertRaises(TypeError):
-            self.store.complete_tool_call("call1", {"status": "ok"},
+            self.store.complete_tool_call(run_id, "call1", {"status": "ok"},
                                           [{"facts": {"ok": 1}}, {"facts": {"bad": object()}}])
         with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM pi_evidence").fetchone()[0], 0)
@@ -171,7 +176,7 @@ class Tools(StoreCase):
     def test_supplier_failure_is_kept_as_a_known_result(self):
         conversation_id, run_id = self.start()
         self.store.begin_tool_call(run_id, "call1", "search_transport", {"date": "2099-03-05"})
-        failed = self.store.fail_tool_call("call1", "supplier_unavailable", "HTTP 503")
+        failed = self.store.fail_tool_call(run_id, "call1", "supplier_unavailable", "HTTP 503")
         self.assertEqual(failed["error"]["code"], "supplier_unavailable")
         self.assertEqual(self.store.begin_tool_call(run_id, "call1", "search_transport",
                                                     {"date": "2099-03-05"}), failed)
@@ -179,12 +184,12 @@ class Tools(StoreCase):
     def test_evidence_is_not_visible_from_another_conversation(self):
         conversation_id, run_id = self.start()
         self.store.begin_tool_call(run_id, "call1", "search_transport", {})
-        [evidence_id] = self.store.complete_tool_call("call1", {}, [{"facts": {"a": 1}}])["evidence_ids"]
+        [evidence_id] = self.store.complete_tool_call(run_id, "call1", {}, [{"facts": {"a": 1}}])["evidence_ids"]
         other_id, other_run = self.start(message_id="m-other")
         with self.assertRaises(NotFound):
             self.store.get_evidence(other_id, evidence_id)
-        with self.assertRaises(ToolCallConflict):
-            self.store.begin_tool_call(other_run, "call1", "search_transport", {})
+        # Call IDs are scoped to their run: the same ID elsewhere is a fresh call, not a conflict.
+        self.assertIsNone(self.store.begin_tool_call(other_run, "call1", "search_transport", {}))
         self.assertNotIn("tool_result", self.event_types(other_id))
 
 
@@ -198,7 +203,8 @@ class Cancellation(StoreCase):
             self.store.begin_tool_call(run_id, "call2", "search_transport", {})
         with self.assertRaises(RunNotActive):
             self.store.add_assistant_message(run_id, "迟到的回答")
-        self.assertIsNone(self.store.complete_tool_call("call1", {"status": "ok"}, [{"facts": {"late": 1}}]))
+        late = self.store.complete_tool_call(run_id, "call1", {"status": "ok"}, [{"facts": {"late": 1}}])
+        self.assertIsNone(late)
         self.assertEqual(self.store.finish_run(run_id, "completed"), "cancelled")
         state = self.store.get_state(conversation_id)
         self.assertIsNone(state["active_run"])
@@ -206,8 +212,11 @@ class Cancellation(StoreCase):
         self.assertNotIn("tool_result", self.event_types(conversation_id))
         with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(db.execute("SELECT status FROM pi_tool_calls").fetchone()[0], "discarded")
+            [late_evidence] = [r[0] for r in db.execute("SELECT id FROM pi_evidence")]
         with self.assertRaises(RunNotActive):
             self.store.begin_tool_call(run_id, "call1", "search_transport", {})
+        with self.assertRaises(NotFound):
+            self.store.get_evidence(conversation_id, late_evidence)
 
     def test_finish_is_idempotent_and_unknown_usage_is_not_zero(self):
         conversation_id, run_id = self.start()
@@ -216,6 +225,21 @@ class Cancellation(StoreCase):
         [finished] = [e for e in self.store.events_after(conversation_id) if e["type"] == "run_finished"]
         self.assertEqual(finished["payload"]["usage"], {"complete": False})
         self.assertEqual(self.store.request_cancel(run_id), "failed")
+
+    def test_usage_is_complete_only_with_every_field(self):
+        full = {"input": 10, "output": 5, "cacheRead": 0, "cacheWrite": 0}
+        cases = [({}, False), ({"input": 10, "output": 5}, False), (full, True),
+                 ({**full, "complete": True, "extra": 1}, True),
+                 ({**full, "complete": False}, False),
+                 ({**full, "output": -1}, False), ({**full, "output": True}, False),
+                 ({**full, "cacheWrite": None, "complete": True}, False)]
+        for index, (usage, complete) in enumerate(cases):
+            with self.subTest(usage=usage):
+                conversation_id = self.store.create_conversation()["id"]
+                run_id = self.store.submit_message(conversation_id, f"u{index}", "查询")["run"]["id"]
+                self.store.finish_run(run_id, "completed", usage=usage)
+                [event] = [e for e in self.store.events_after(conversation_id) if e["type"] == "run_finished"]
+                self.assertIs(event["payload"]["usage"]["complete"], complete)
 
 
 class Restart(StoreCase):
@@ -226,6 +250,10 @@ class Restart(StoreCase):
         self.assertEqual(restarted.recover_interrupted(), [run_id])
         self.assertEqual(restarted.recover_interrupted(), [])
         self.assertEqual(restarted.run_status(run_id), "interrupted")
+        self.assertEqual(self.call_status(run_id, "call1"), "unknown")
+        [finished] = [e for e in restarted.events_after(conversation_id) if e["type"] == "run_finished"]
+        self.assertEqual(finished["payload"]["status"], "interrupted")
+        self.assertEqual(finished["payload"]["stop_reason"], "service_restart")
         with self.assertRaises(ToolOutcomeUnknown):
             restarted.begin_tool_call(run_id, "call1", "search_transport", {"date": "2099-03-05"})
         state = restarted.get_state(conversation_id)
@@ -273,6 +301,123 @@ class Isolation(StoreCase):
         self.assertNotIn("广州", str(self.store.events_after(first)))
         listed = {c["id"] for c in self.store.list_conversations()}
         self.assertEqual(listed, {first, second})
+
+
+class Review(StoreCase):
+    """Cases added after review of PR #36."""
+
+    def test_finishing_a_run_marks_its_pending_calls_unknown(self):
+        for status in ("completed", "failed", "cancelled"):
+            with self.subTest(status=status):
+                conversation_id, run_id = self.start(message_id=f"m-{status}")
+                self.store.begin_tool_call(run_id, "call1", "search_transport", {})
+                if status == "cancelled":
+                    self.store.request_cancel(run_id)
+                self.store.finish_run(run_id, status)
+                self.assertEqual(self.call_status(run_id, "call1"), "unknown")
+                self.assertIsNone(self.store.complete_tool_call(run_id, "call1", {"status": "ok"},
+                                                                [{"facts": {"late": 1}}]))
+                self.assertEqual(self.call_status(run_id, "call1"), "discarded")
+                self.assertNotIn("tool_result", self.event_types(conversation_id))
+
+    def test_restart_also_clears_pending_calls_under_ended_runs(self):
+        conversation_id, run_id = self.start()
+        self.store.begin_tool_call(run_id, "call1", "search_transport", {})
+        self.store.finish_run(run_id, "completed")
+        with closing(sqlite3.connect(self.path)) as db, db:  # simulate a row written by older code
+            db.execute("UPDATE pi_tool_calls SET status='pending'")
+        ConversationStore(self.path, clock=self.clock).recover_interrupted()
+        self.assertEqual(self.call_status(run_id, "call1"), "unknown")
+
+    def test_restart_while_cancelling_is_interrupted(self):
+        conversation_id, run_id = self.start()
+        self.store.begin_tool_call(run_id, "call1", "search_transport", {})
+        self.store.request_cancel(run_id)
+        self.assertEqual(ConversationStore(self.path, clock=self.clock).recover_interrupted(), [run_id])
+        self.assertEqual(self.store.run_status(run_id), "interrupted")
+        self.assertEqual(self.call_status(run_id, "call1"), "unknown")
+
+    def test_same_call_id_in_a_later_run_queries_again(self):
+        conversation_id, first = self.start()
+        args = {"date": "2099-03-05"}
+        self.store.begin_tool_call(first, "call1", "search_transport", args)
+        self.store.complete_tool_call(first, "call1", {"price": "800"})
+        self.store.finish_run(first, "completed")
+        second = self.store.submit_message(conversation_id, "m2", "再查一次")["run"]["id"]
+        self.assertIsNone(self.store.begin_tool_call(second, "call1", "search_transport", args))
+
+    def test_evidence_ids_are_generated_and_never_collide(self):
+        conversation_id, run_id = self.start()
+        self.store.begin_tool_call(run_id, "a", "search_transport", {})
+        self.store.begin_tool_call(run_id, "b", "search_transport", {"again": True})
+        same = [{"id": "MU1234", "facts": {"flight": "MU1234"}}]
+        first = self.store.complete_tool_call(run_id, "a", {}, same)["evidence_ids"]
+        second = self.store.complete_tool_call(run_id, "b", {}, same)["evidence_ids"]
+        self.assertEqual(len(set(first + second)), 2)
+        self.assertNotIn("MU1234", first + second)
+
+    def test_redelivered_result_is_idempotent_and_different_result_conflicts(self):
+        conversation_id, run_id = self.start()
+        self.store.begin_tool_call(run_id, "call1", "search_transport", {})
+        stored = self.store.complete_tool_call(run_id, "call1", {"status": "ok"}, [{"facts": {"a": 1}}])
+        self.assertEqual(self.store.complete_tool_call(run_id, "call1", {"status": "ok"}, [{"facts": {"a": 1}}]),
+                         stored)
+        with self.assertRaises(ToolCallConflict):
+            self.store.complete_tool_call(run_id, "call1", {"status": "changed"})
+        with self.assertRaises(ToolCallConflict):
+            self.store.fail_tool_call(run_id, "call1", "x", "y")
+        with closing(sqlite3.connect(self.path)) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM pi_evidence").fetchone()[0], 1)
+
+    def test_argument_key_order_does_not_matter(self):
+        conversation_id, run_id = self.start()
+        self.store.begin_tool_call(run_id, "call1", "search_transport", {"origin": "上海", "date": "2099-03-05"})
+        stored = self.store.complete_tool_call(run_id, "call1", {"status": "ok"})
+        self.assertEqual(self.store.begin_tool_call(run_id, "call1", "search_transport",
+                                                    {"date": "2099-03-05", "origin": "上海"}), stored)
+
+    def test_assistant_message_ids_are_idempotent(self):
+        conversation_id, run_id = self.start()
+        self.store.add_assistant_message(run_id, "第一段", message_id="a1")
+        self.store.add_assistant_message(run_id, "第一段", message_id="a1")
+        with self.assertRaises(MessageConflict):
+            self.store.add_assistant_message(run_id, "改过的", message_id="a1")
+        with self.assertRaises(MessageConflict):
+            self.store.add_assistant_message(run_id, "上海到三亚 2099-03-05 的航班", message_id="m1")
+        self.assertEqual([m["id"] for m in self.store.get_state(conversation_id)["messages"]], ["m1", "a1"])
+
+    def test_final_reply_commits_with_run_end_and_is_dropped_after_cancel(self):
+        conversation_id, run_id = self.start()
+        self.assertEqual(self.store.finish_run(run_id, "completed", reply="三亚航班如下"), "completed")
+        self.assertEqual([m["role"] for m in self.store.get_state(conversation_id)["messages"]],
+                         ["user", "assistant"])
+        self.assertEqual(self.event_types(conversation_id)[-2:], ["message", "run_finished"])
+        other_id, other_run = self.start(message_id="m-other")
+        self.store.request_cancel(other_run)
+        self.assertEqual(self.store.finish_run(other_run, "completed", reply="迟到"), "cancelled")
+        self.assertEqual([m["role"] for m in self.store.get_state(other_id)["messages"]], ["user"])
+
+    def test_events_are_rejected_for_foreign_or_ended_runs(self):
+        conversation_id, run_id = self.start()
+        other_id, other_run = self.start(message_id="m-other")
+        with self.assertRaises(NotFound):
+            self.store.append_event(conversation_id, "text_delta", {"text": "x"}, other_run)
+        self.store.finish_run(run_id, "completed")
+        with self.assertRaises(RunNotActive):
+            self.store.append_event(conversation_id, "text_delta", {"text": "x"}, run_id)
+        self.store.append_event(conversation_id, "note", {"text": "conversation-level"})
+
+    def test_entries_are_tagged_with_their_run(self):
+        conversation_id, run_id = self.start()
+        self.store.save_entries(conversation_id, [{"id": "e1"}])
+        self.store.save_entries(conversation_id, [{"id": "e2"}], run_id=run_id)
+        self.store.save_entries(conversation_id, [{"id": "e1", "v": 2}])
+        self.assertEqual(self.store.load_entries(conversation_id, with_run_id=True),
+                         [{"run_id": None, "entry": {"id": "e1", "v": 2}},
+                          {"run_id": run_id, "entry": {"id": "e2"}}])
+        other_id, other_run = self.start(message_id="m-other")
+        with self.assertRaises(NotFound):
+            self.store.save_entries(conversation_id, [{"id": "e3"}], run_id=other_run)
 
 
 if __name__ == "__main__":
