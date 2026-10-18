@@ -13,6 +13,8 @@ python -B -X utf8 -m unittest discover -s verification/pi-step0 -p test_portable
 
 `tests/test_tools_*.py` 直接调用真实适配器，以合成 HTTP 替代供应商；覆盖交通/详情、酒店/详情、地点与路线、证据、金额精度、失败、重试、脱敏及本地 Trace。没有复用旧 Agent loop、HIL 或私有历史夹具。`tests/suppliers.py` 是合成线协议数据，不是历史线上记录。
 
+`tests/test_conversations.py` 是骨架第 1 个 PR 的白盒测试：直接使用 `travel_agent/conversations.py` 的正式 SQLite 会话存储（临时库、固定时钟），覆盖消息幂等与冲突、同会话单运行、并发提交、事务回滚、工具 ID 幂等与 unknown、证据归属、取消后迟到结果只归档、重启标 interrupted、跨午夜日期、事件游标和旧表保留。它还不是 Pi 运行层或 HTTP 服务。
+
 Pi portable 测试经 Python→实际 Node 子进程→锁定 Pi SDK→SQLite，覆盖流式消息、工具提交幂等、取消/强杀、压缩恢复、未知用量和资源隔离。验证库均在系统临时目录；默认检查不读 `.env`、本机历史运行数据或在线供应商。SDK 的 faux token 不代表真实账单。
 
 ## 可控测试边界
@@ -23,7 +25,7 @@ Pi portable 测试经 Python→实际 Node 子进程→锁定 Pi SDK→SQLite，
 
 ## 端到端还缺什么
 
-- 正式 Python 会话服务、按会话隔离的 Node 运行时与持久化事务；进程探针不是这些模块的实现。
+- 正式 Python 会话服务与按会话隔离的 Node 运行时（SQLite 会话存储已有，尚未接入运行层）；进程探针不是这些模块的实现。
 - 正式 HTTP/SSE 的启动/关闭、临时端口/数据库、模型边界替身、失败与重连测试。
 - 新页面及浏览器测试依赖、安装步骤、可访问定位、服务启停夹具和失败截图/Trace；现阶段不保留空壳浏览器测试。
 - 独立真实验收命令：当次未来日期、真实 DeepSeek/供应商、页面输入到成果区及来源证据；真实凭证不足或服务不可用须写未验收，不能拿离线通过代替。
