@@ -1,6 +1,6 @@
 # 差旅助手
 
-当前仓库提供真实差旅工具适配器、测试和 Pi SDK 接入探针，**尚未形成可供用户使用的产品 MVP**：目前没有正式会话服务、产品 HTTP API、页面或 CLI。不会创建订单或付款。
+当前仓库提供本地浏览器航班查询基线：FastAPI 托管页面，Pi SDK 1.3.0 运行在 Node Worker 中，调用 Python `RealTools` 查询航班。支持同一内存会话追问、结果卡片、刷新续聊与取消。**这是航班纵向切片，不代表 B01–B12 或完整 MVP 已验收**。不会创建订单或付款。
 
 ## 业务依据
 
@@ -9,15 +9,30 @@
 
 ## 环境与默认检查
 
-需要 Python 3.11+、Node 22 和 npm。在 Windows PowerShell 的仓库根目录执行：
+需要 Python 3.11+、Node 22.19+ 和 npm。在 Windows PowerShell 的仓库根目录执行：
 
 ```powershell
 python -m pip install -e .
+npm.cmd ci --ignore-scripts --no-audit --no-fund
 npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
 python scripts/check.py
 ```
 
 默认检查运行工具测试与 Pi 离线进程测试，不需要真实密钥，不调用在线供应商，也不产生真实模型费用。测试通过不等于正式产品或真实端到端验收通过。
+
+## 运行浏览器基线
+
+在现有 `.env` 或环境变量中配置模型和航班供应商（字段见 `.env.example`），然后运行：
+
+```powershell
+python -B -X utf8 -m travel_agent
+```
+
+打开 [行旅](http://127.0.0.1:8765)，先说“我要去三亚”，再补充出发城市与日期。也可以一次提供完整查询条件。查询使用真实接口，可能产生模型及供应商费用；未知价格不会补零。
+
+仅支持单用户、单服务进程（不要使用多个 Uvicorn workers）。每个会话串行运行，90 秒总执行预算，单次供应商查询不超过 45 秒；取消先中止 Pi，已发出的供应商请求在超时内收尾。SSE 重连和页面刷新不会发起新模型调用。正常完成后复用 Node Worker，服务退出时回收；Worker 异常时明确提示上下文丢失。页面只转发筛选过的状态、答复和航班事实，不转发内部思考与原始供应商响应。
+
+会话只保存在内存，服务重启后不恢复，**B08 尚未完整满足**。历史卡片不是当前报价。本版不接入酒店、火车、路线、订单付款或多用户；现有工具与 Trace 功能保留。新增验收工具及运行方式见 [verification/baseline](verification/baseline/README.md)。真实航班证据保存在 `artifacts/baseline/<session-id>/`，不作为会话数据库。
 
 ## 真实模型探针
 

@@ -13,6 +13,7 @@ def main():
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "tests", "-v"],
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "verification/pi-step0",
          "-p", "test_portable.py", "-v"],
+        [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "verification/baseline", "-v"],
     ]
     for command in commands:
         print("Running: " + " ".join(command), flush=True)
