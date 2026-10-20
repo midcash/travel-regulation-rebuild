@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>行旅 · 你的差旅助手</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <div class="rail" aria-hidden="true"><span class="orb small"></span><span class="rail-active">✈</span><span class="rail-bottom">行</span></div>
+  <aside class="sidebar">
+    <a class="brand" href="/">行旅 <span>TRAVEL ASSISTANT</span></a>
+    <button class="new-chat" id="new-chat">＋ 开始新会话 <span>↗</span></button>
+    <div class="section-label">当前会话</div>
+    <div class="conversation-item"><span>◌</span><span id="chat-title">新的出行想法</span></div>
+    <div class="sidebar-note"><span class="note-icon">↗</span><strong>从一个目的地开始</strong><p>补充城市和日期，查询航班。<br>你的下一程，我们一起安排。</p><span class="tag">国内航班 · 单人出行</span></div>
+    <div class="sidebar-footer"><span class="avatar">旅</span><div>个人差旅空间<small>本地会话</small></div><span class="local-dot"></span></div>
+  </aside>
+  <main>
+    <header><div><strong>行旅</strong><span class="header-divider">/</span><span>差旅助手</span></div><div class="header-actions"><span class="session-badge"><i></i> 当前内存会话</span><button id="mobile-new" aria-label="开始新会话" title="开始新会话">＋</button></div></header>
+    <div class="content" id="content">
+      <section class="welcome" id="welcome">
+        <div class="welcome-brand"><span class="orb"></span><strong>行旅</strong></div>
+        <h1>下一程，想去哪里？</h1>
+        <p>告诉我你的出行想法，一起找到合适的航班。</p>
+      </section>
+      <section class="messages" id="messages" aria-label="对话消息" aria-live="polite"></section>
+      <div class="composer-area" id="composer-area">
+        <form id="composer">
+          <div class="input-row"><span class="sparkle" aria-hidden="true">✧</span><textarea id="prompt" aria-label="差旅需求" placeholder="说说你的出行计划，例如：我要去三亚……" rows="3" maxlength="8000"></textarea></div>
+          <div class="composer-bottom"><span class="input-hint">Enter 发送 <span>·</span> Shift + Enter 换行</span><div class="composer-actions"><button type="button" id="cancel" class="cancel" hidden>■ 取消</button><button type="submit" class="send" id="send"><span>↗</span> 发送</button></div></div>
+        </form>
+        <div class="examples" id="examples"><button data-example="我要去三亚。"><span class="example-icon violet">✈</span> 我要去三亚 <span>↗</span></button><button data-example="帮我查杭州明天去北京的航班。"><span class="example-icon green">▦</span> 查明天的航班 <span>↗</span></button><button data-example="你能帮我做什么？"><span class="example-icon peach">✧</span> 了解行旅 <span>↗</span></button></div>
+        <div class="status-row"><span id="status" role="status">准备好，随时出发</span><span id="connection"></span></div>
+        <div class="error" id="error" role="alert" hidden></div>
+      </div>
+    </div>
+    <footer>航班以本次供应商查询为依据，价格与余位可能变化。当前不提供预订。<span>会话在服务重启后不保留。</span></footer>
+  </main>
+</div>
+</body>
+</html>

@@ -37,10 +37,11 @@ def validate_search(args):
 
 def assess_candidate(candidate, query, request):
     """Keep supplier facts unchanged; annotate requested constraints separately."""
+    request = request or {}
     reasons = []
-    if (query["origin"], query["destination"]) != (request["origin"], request["destination"]):
+    if (query["origin"], query["destination"]) != (request.get("origin", query["origin"]), request.get("destination", query["destination"])):
         reasons.append("wrong_cities")
-    if request["transport_mode"] not in ("any", candidate["mode"]):
+    if request.get("transport_mode", query["mode"]) not in ("any", candidate["mode"]):
         reasons.append("wrong_mode")
     try:
         times = []
@@ -57,7 +58,7 @@ def assess_candidate(candidate, query, request):
             reasons.append("reversed_times")
         if request.get("required_arrival_date") and arrival.date().isoformat() != request["required_arrival_date"]:
             reasons.append("not_previous_day_arrival")
-        if arrival > datetime.fromisoformat(request["meeting_at"]):
+        if request.get("meeting_at") and arrival > datetime.fromisoformat(request["meeting_at"]):
             reasons.append("after_meeting")
     except (ValueError, TypeError, OverflowError):
         reasons.append("unknown_or_invalid_times")

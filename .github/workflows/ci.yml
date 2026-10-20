@@ -25,10 +25,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "22.19.0"
 
       - name: Install Python package
         run: python -m pip install -e ".[otel]"
+
+      - name: Install locked product Pi dependencies
+        run: npm.cmd ci --ignore-scripts --no-audit --no-fund
 
       - name: Install locked Pi dependencies
         run: npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
