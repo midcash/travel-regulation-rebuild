@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from datetime import datetime
+from datetime import date, datetime
 import json
 import os
 from pathlib import Path
@@ -13,6 +13,7 @@ import uuid
 
 from .facts import CHINA
 from .real_tools import RealTools
+from .transport import validate_search
 
 SYSTEM = """你是「行旅」个人国内差旅助手。本版只支持航班查询及必要的差旅咨询。
 用简洁中文回答。利用当前同一会话已提供的信息；查询航班必须有出发城市、目的城市、明确的出发日期。
@@ -32,6 +33,24 @@ FLIGHT_TOOL = {"name": "search_flights", "description": "查询指定日期国�
         "departure_date": {"type": "string", "description": "YYYY-MM-DD，Asia/Shanghai"},
         "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
         "required": ["origin", "destination", "departure_date"], "additionalProperties": False}}
+
+NO_ANSWER_TEXT = "本次未取得有效答复，请重试。"
+FALLBACK_REPLIES = {
+    "model_error": "模型未能完成答复，已取得的航班结果保留如下。",
+    "worker_error": "会话进程异常，上下文已丢失。已有结果仍可查看，请开始新会话。",
+    "timeout": "本次请求超时，未自动重试。", "cancelled": "本次请求已取消。"}
+
+
+def _failure_kind(result):
+    error_type = result.get("error", {}).get("type")
+    if error_type == "InvalidQuery":
+        return "invalid_query"
+    if error_type == "ConfigurationError":
+        return "configuration_error"
+    if result.get("http_requests", 0) > 0 and error_type in {
+            "TransportTimeout", "SupplierHTTPError", "TransportNetworkError", "SupplierResponseError"}:
+        return "supplier_error"
+    return "tool_error"
 
 
 class WorkerError(RuntimeError):
@@ -178,19 +197,40 @@ class Conversation:
             args = event["args"]
             if set(args) - {"origin", "destination", "departure_date", "max_results"}:
                 raise ValueError("Unexpected flight arguments")
-            self.tools.current_date = captured.date()
-            return self.tools.execute("search_transport", {**args, "mode": "flight"}, timeout=timeout)
+            query = {**args, "mode": "flight"}
+            validate_search(query)
+            if date.fromisoformat(query["departure_date"]) < captured.date():
+                raise ValueError("Departure date is before the request date")
         except (ValueError, TypeError, KeyError):
             return {"status": "error", "data": None, "evidence_refs": [],
                     "error": {"type": "InvalidQuery", "message": "查询参数不完整、日期无效或工具不受支持。"}}
+        attempted_at = self.clock().astimezone(CHINA).isoformat()
+        try:
+            self.tools.current_date = captured.date()
+            result = self.tools.execute("search_transport", query, timeout=timeout)
+            if result.get("http_requests", 0) > 0:
+                result["attempted_at"] = attempted_at
+                if result["status"] == "ok" and result.get("evidence_refs"):
+                    result["observed_at"] = self.clock().astimezone(CHINA).isoformat()
+            return result
         except Exception:
             return {"status": "error", "data": None, "evidence_refs": [],
                     "error": {"type": "ToolError", "message": "工具执行失败，未生成替代结果。"}}
 
-    def _public_result(self, result, captured):
+    def _public_result(self, result):
         # RealTools already normalizes facts; raw supplier wire data is never exposed.
-        return {key: result[key] for key in ("status", "data", "evidence_refs", "error", "warnings", "call_id") if key in result} | {
-            "observed_at": self.clock().astimezone(CHINA).isoformat(), "source": "途牛航班接口"}
+        public = {key: result[key] for key in (
+            "status", "data", "evidence_refs", "error", "warnings", "call_id", "http_requests") if key in result}
+        if result.get("http_requests", 0) > 0:
+            if result.get("attempted_at"):
+                public["attempted_at"] = result["attempted_at"]
+            if result.get("evidence_refs"):
+                public["source"] = "途牛航班接口"
+                if result["status"] == "ok" and result.get("observed_at"):
+                    public["observed_at"] = result["observed_at"]
+        if result["status"] == "error":
+            public["failure_kind"] = _failure_kind(result)
+        return public
 
     async def _drive(self, text, captured, tool_tasks):
         if not self.worker:
@@ -209,7 +249,7 @@ class Conversation:
             remaining = max(.01, self.timeout - (time.monotonic() - self.started))
             result = await asyncio.to_thread(self._execute, event, captured, min(45, remaining))
             if not self.run["cancel_requested"]:
-                self.run["results"].append(self._public_result(result, captured))
+                self.run["results"].append(self._public_result(result))
                 self.run["stage"] = "正在组织结果"
                 self.changed()
                 await self.worker.send("tool_result", id=event["id"], result=result)
@@ -275,19 +315,18 @@ class Conversation:
                 outcome = "cancelled"
             results = self.run["results"]
             labels = {"complete": "查询完成" if results else "等待你的补充", "model_error": "模型答复失败",
-                      "worker_error": "会话进程异常", "timeout": "请求超时", "cancelled": "已取消"}
+                      "worker_error": "会话进程异常", "timeout": "请求超时", "cancelled": "已取消",
+                      "invalid_query": "查询参数需要补充或修正", "tool_error": "本地工具执行失败",
+                      "configuration_error": "查询配置错误", "supplier_error": "供应商查询失败"}
             if outcome == "complete" and results:
-                if any(r["status"] == "error" for r in results):
-                    outcome = "supplier_error"
-                    labels[outcome] = "供应商查询失败"
+                errors = [r for r in results if r["status"] == "error"]
+                if errors:
+                    outcome = errors[0]["failure_kind"]
                 elif not any(r.get("data", {}).get("candidates") for r in results):
                     outcome = "empty"
                     labels[outcome] = "本次查询无候选"
-            fallback = {"model_error": "模型未能完成答复，已取得的航班结果保留如下。",
-                        "worker_error": "会话进程异常，上下文已丢失。已有结果仍可查看，请开始新会话。",
-                        "timeout": "本次请求超时，未自动重试。", "cancelled": "本次请求已取消。"}
             self.messages.append({"role": "assistant", "id": self.run["id"],
-                "text": fallback.get(outcome, answer or "本次未取得有效答复，请重试。"), "results": results,
+                "text": FALLBACK_REPLIES.get(outcome, answer or NO_ANSWER_TEXT), "results": results,
                 "status": outcome})
             self.run.update(status=outcome, stage=labels[outcome])
             self.changed()

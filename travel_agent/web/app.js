@@ -29,8 +29,16 @@ function renderResults(results, parent) {
   results.forEach(result => {
     const query = result.data;
     const caption = query ? `${query.origin} → ${query.destination} · ${query.departure_date}` : '航班查询';
-    container.append(text('div', `${caption} · ${result.source} · 查询于 ${result.observed_at.slice(0, 16).replace('T', ' ')}`, 'query-meta'));
-    if (result.status === 'error') container.append(text('div', `查询失败 · ${result.error?.type || 'SupplierError'}。${result.error?.message || '未取得有效结果。'}`, 'result-notice'));
+    const meta = [caption];
+    if (result.source) meta.push(result.source);
+    if (result.attempted_at) meta.push(`尝试查询于 ${result.attempted_at.slice(0, 16).replace('T', ' ')}`);
+    if (result.observed_at) meta.push(`结果取得于 ${result.observed_at.slice(0, 16).replace('T', ' ')}`);
+    container.append(text('div', meta.join(' · '), 'query-meta'));
+    if (result.status === 'error') {
+      const labels = {invalid_query: '查询参数需要补充或修正', tool_error: '本地工具执行失败',
+        configuration_error: '查询配置错误', supplier_error: '供应商查询失败'};
+      container.append(text('div', `${labels[result.failure_kind] || '工具执行失败'} · ${result.error?.type || 'UnknownError'}。${result.error?.message || '未取得有效结果。'}`, 'result-notice'));
+    }
     else if (!query?.candidates?.length) container.append(text('div', '本次查询成功，但未返回候选；这不代表全市场无航班。', 'result-notice'));
     else query.candidates.forEach(candidate => container.append(flightCard(candidate)));
   });

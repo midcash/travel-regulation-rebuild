@@ -11,6 +11,8 @@
 
 需要 Python 3.11+、Node 22.19+ 和 npm。在 Windows PowerShell 的仓库根目录执行：
 
+**本版仅支持从完整仓库源码运行，使用 editable 安装 Python 包，并分别通过根目录和 Pi 探针目录的 npm 锁文件安装依赖。** 请保留源码目录与各自的 `node_modules`；启动时以仓库根目录为工作目录。Python wheel 不包含 Pi 的 npm 运行依赖，独立 wheel 安装不属于本版支持的交付方式。仅安装 Python 包不能替代下列 npm 安装步骤。
+
 ```powershell
 python -m pip install -e .
 npm.cmd ci --ignore-scripts --no-audit --no-fund

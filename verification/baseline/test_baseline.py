@@ -165,3 +165,36 @@ class Baseline(unittest.IsolatedAsyncioTestCase):
                       {"name": "search_flights", "args": {"mode": "train"}}):
             self.assertEqual(self.conversation._execute(event, NOW, 45)["status"], "error")
         self.assertEqual(self.requests, [])
+
+    async def test_local_failures_are_distinct_from_actual_supplier_failure(self):
+        self.conversation.responses = lambda text, captured: [
+            {"tool": "search_flights", "args": {"origin": "杭州", "destination": "三亚", "departure_date": "2026-10-18"}},
+            {"text": "请提供有效的未来日期。"}]
+        invalid = await self.turn("验证过去日期")
+        self.assertEqual(invalid["run"]["status"], "invalid_query")
+        self.assertEqual(invalid["run"]["stage"], "查询参数需要补充或修正")
+        self.assertNotIn("source", invalid["run"]["results"][0])
+        self.assertNotIn("observed_at", invalid["run"]["results"][0])
+
+        self.conversation.responses = model_responses
+        with patch.object(self.conversation.tools, "execute", side_effect=RuntimeError("synthetic local error")):
+            local = await self.turn("杭州三亚 2026-11-20")
+        self.assertEqual(local["run"]["status"], "tool_error")
+        self.assertEqual(local["run"]["stage"], "本地工具执行失败")
+        self.assertNotIn("source", local["run"]["results"][0])
+
+        with patch.dict(os.environ, {"TUNIU_API_KEY": ""}):
+            config = await self.turn("杭州三亚 2026-11-20")
+        self.assertEqual(config["run"]["status"], "configuration_error")
+        self.assertEqual(config["run"]["stage"], "查询配置错误")
+        self.assertNotIn("attempted_at", config["run"]["results"][0])
+        self.assertEqual(self.requests, [])
+
+        self.handler = lambda r: httpx.Response(503)
+        failed = await self.turn("杭州三亚 2026-11-20")
+        self.assertEqual(failed["run"]["status"], "supplier_error")
+        self.assertEqual(failed["run"]["stage"], "供应商查询失败")
+        result = failed["run"]["results"][0]
+        self.assertTrue(result["evidence_refs"])
+        self.assertIn("attempted_at", result)
+        self.assertNotIn("observed_at", result)
