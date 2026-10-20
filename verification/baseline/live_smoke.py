@@ -14,6 +14,28 @@ from travel_agent.runtime import Conversation, NodeWorker, FALLBACK_REPLIES, NO_
 from travel_agent.settings import load_env
 from travel_agent.supplier_wire import redact
 
+# The documented two-turn scenario. The paid smoke only passes when the model
+# actually searched this route and this date, so a wrong query cannot look like
+# a successful run.
+EXPECTED_QUERY = {"origin": "杭州", "destination": "三亚", "departure_date": "2026-11-20"}
+
+
+def _place(value):
+    # Tolerate a trailing administrative suffix such as 杭州市; never another city.
+    return value.strip().removesuffix("市") if isinstance(value, str) else value
+
+
+def _matches_scenario(result):
+    data = result.get("data") or {}
+    return (_place(data.get("origin")) == EXPECTED_QUERY["origin"]
+            and _place(data.get("destination")) == EXPECTED_QUERY["destination"]
+            and data.get("departure_date") == EXPECTED_QUERY["departure_date"])
+
+
+def _searched(results):
+    return [result for result in results
+            if result.get("status") == "ok" and (result.get("data") or {}).get("candidates")]
+
 
 class ObservedWorker(NodeWorker):
     def __init__(self):
@@ -46,10 +68,16 @@ async def main():
             if turn == 0:
                 if conversation.worker.flight_requests or conversation.tools.calls or conversation.run["results"]:
                     return 1
-            elif (not conversation.worker.flight_requests or not conversation.tools.calls
-                  or not any(result.get("status") == "ok" and (result.get("data") or {}).get("candidates")
-                             for result in conversation.run["results"])):
-                return 1
+            else:
+                searched = _searched(conversation.run["results"])
+                if not searched or not conversation.worker.flight_requests or not conversation.tools.calls:
+                    return 1
+                if not all(_matches_scenario(result) for result in searched):
+                    # A correct search must not mask a wrong one.
+                    print(json.dumps({"unexpected_query": [
+                        {key: (result.get("data") or {}).get(key) for key in EXPECTED_QUERY}
+                        for result in searched if not _matches_scenario(result)]}, ensure_ascii=False))
+                    return 1
         return 0
     finally:
         await conversation.close()

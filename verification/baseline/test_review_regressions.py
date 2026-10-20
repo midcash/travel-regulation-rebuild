@@ -21,7 +21,7 @@ from travel_agent.runtime import Conversation, FALLBACK_REPLIES, NO_ANSWER_TEXT,
 
 ROOT = Path(__file__).resolve().parents[2]
 ARGS = {"origin": "杭州", "destination": "三亚", "departure_date": "2026-11-20"}
-RESULT = {"status": "ok", "data": {"candidates": [{"flight_no": "SYNTHETIC"}]}}
+RESULT = {"status": "ok", "data": {"candidates": [{"flight_no": "SYNTHETIC"}], **ARGS}}
 
 
 class SmokeCriteria(unittest.IsolatedAsyncioTestCase):
@@ -70,6 +70,28 @@ class SmokeCriteria(unittest.IsolatedAsyncioTestCase):
 
     async def test_accepts_two_turn_success_without_adding_calls(self):
         code, submitted = await self.run_smoke([{}, {"requests": 1, "calls": 1, "results": [RESULT], "text": "查询完成，见航班卡片。"}])
+        self.assertEqual((code, submitted), (0, 2))
+
+    async def test_rejects_success_for_wrong_route_or_date(self):
+        base = {"requests": 1, "calls": 1, "text": "查询完成，见航班卡片。"}
+        wrong = [{"origin": "北京"}, {"destination": "海口"}, {"departure_date": "2026-11-21"},
+                 {"origin": None}, {"departure_date": None}]
+        for change in wrong:
+            with self.subTest(change=change):
+                searched = {"status": "ok", "data": {"candidates": [{"flight_no": "SYNTHETIC"}], **ARGS, **change}}
+                code, submitted = await self.run_smoke([{}, {**base, "results": [searched]}])
+                self.assertNotEqual(code, 0)
+                self.assertEqual(submitted, 2)
+
+    async def test_correct_search_does_not_mask_a_wrong_one(self):
+        wrong = {"status": "ok", "data": {"candidates": [{"flight_no": "OTHER"}], **ARGS, "origin": "北京"}}
+        code, _ = await self.run_smoke([{}, {"requests": 2, "calls": 2, "results": [RESULT, wrong], "text": "查询完成。"}])
+        self.assertNotEqual(code, 0)
+
+    async def test_accepts_administrative_suffix_on_places(self):
+        searched = {"status": "ok", "data": {"candidates": [{"flight_no": "SYNTHETIC"}],
+                                                 **ARGS, "origin": "杭州市", "destination": "三亚市"}}
+        code, submitted = await self.run_smoke([{}, {"requests": 1, "calls": 1, "results": [searched], "text": "查询完成。"}])
         self.assertEqual((code, submitted), (0, 2))
 
     async def test_counts_flight_bridge_requests_even_before_python_execution(self):
