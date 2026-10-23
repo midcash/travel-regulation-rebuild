@@ -7,6 +7,18 @@
 - [CONTEXT.md](CONTEXT.md)：领域术语与语义。
 - [已确认的业务行为与验收场景](docs/product-behavior.md)：B01–B12。它们是目标行为，不代表当前已全部实现。
 
+## 开发导航
+
+先读 [协作约定](AGENTS.md)，再沿下面的产品链路定位；业务含义以以上两份业务文档为准。
+
+1. [启动入口](travel_agent/__main__.py) → [FastAPI 页面、会话与 SSE 接口](travel_agent/app.py)。
+2. [浏览器页面](travel_agent/web/index.html)、[交互与结果卡片](travel_agent/web/app.js)、[样式](travel_agent/web/style.css)。
+3. [Conversation / NodeWorker](travel_agent/runtime.py)：本版系统提示、航班工具声明、内存会话、调用桥、取消与超时。
+4. [Node Worker](travel_agent/node/worker.mjs)：Pi 管理模型循环与上下文，只开放 `search_flights`，将供应商调用交回 Python。
+5. [RealTools](travel_agent/real_tools.py) → [交通查询](travel_agent/transport.py)、[详情](travel_agent/transport_detail.py)、[住宿](travel_agent/stays.py)、[地点](travel_agent/places.py)、[路线](travel_agent/route.py)。底层保留六类工具，**不表示它们均已接入当前产品**；事实结构与传输边界见 [facts](travel_agent/facts.py)、[supplier_wire](travel_agent/supplier_wire.py)。
+
+[默认检查入口](scripts/check.py) 对应 [Windows CI](.github/workflows/ci.yml)；[浏览器验收入口及 B01–B12 证据索引](verification/baseline/README.md) 区分底层工具、正式运行时与浏览器检查。[Pi 接入探针](verification/pi-step0/README.md) 是独立验证代码，不是产品会话实现。[Trace 存储](travel_agent/telemetry.py) 也不等同于产品会话恢复。
+
 ## 环境与默认检查
 
 需要 Python 3.11+、Node 22.19+ 和 npm。在 Windows PowerShell 的仓库根目录执行：
