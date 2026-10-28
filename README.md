@@ -1,6 +1,6 @@
 # 差旅助手
 
-当前仓库提供本地浏览器航班查询基线：FastAPI 托管页面，Pi SDK 1.3.0 运行在 Node Worker 中，调用 Python `RealTools` 查询航班。支持同一内存会话追问、结果卡片、刷新续聊与取消。**这是航班纵向切片，不代表 B01–B12 或完整 MVP 已验收**。不会创建订单或付款。
+当前仓库提供本地浏览器航班查询基线：FastAPI 托管页面，Pi SDK 1.3.0 运行在 Node Worker 中，调用 Python `RealTools` 查询航班。支持会话追问、结果卡片、刷新与重启续聊、取消。**这是航班纵向切片，不代表 B01–B12 或完整 MVP 已验收**。不会创建订单或付款。
 
 ## 业务依据
 
@@ -13,7 +13,7 @@
 
 1. [启动入口](travel_agent/__main__.py) → [FastAPI 页面、会话与 SSE 接口](travel_agent/app.py)。
 2. [浏览器页面](travel_agent/web/index.html)、[交互与结果卡片](travel_agent/web/app.js)、[样式](travel_agent/web/style.css)。
-3. [Conversation / NodeWorker](travel_agent/runtime.py)：本版系统提示、航班工具声明、内存会话、调用桥、取消与超时。
+3. [Conversation / NodeWorker](travel_agent/runtime.py)：本版系统提示、航班工具声明、会话检查点、调用桥、取消与超时；[SessionStore](travel_agent/session_store.py) 保存独立 SQLite 会话库。
 4. [Node Worker](travel_agent/node/worker.mjs)：Pi 管理模型循环与上下文，只开放 `search_flights`，将供应商调用交回 Python。
 5. [RealTools](travel_agent/real_tools.py) → [交通查询](travel_agent/transport.py)、[详情](travel_agent/transport_detail.py)、[住宿](travel_agent/stays.py)、[地点](travel_agent/places.py)、[路线](travel_agent/route.py)。底层保留六类工具，**不表示它们均已接入当前产品**；事实结构与传输边界见 [facts](travel_agent/facts.py)、[supplier_wire](travel_agent/supplier_wire.py)。
 
@@ -46,7 +46,7 @@ python -B -X utf8 -m travel_agent
 
 仅支持单用户、单服务进程（不要使用多个 Uvicorn workers）。每个会话串行运行，90 秒总执行预算，单次供应商查询不超过 45 秒；取消先中止 Pi，已发出的供应商请求在超时内收尾。SSE 重连和页面刷新不会发起新模型调用。正常完成后复用 Node Worker，服务退出时回收；Worker 异常时明确提示上下文丢失。页面只转发筛选过的状态、答复和航班事实，不转发内部思考与原始供应商响应。
 
-会话只保存在内存，服务重启后不恢复，**B08 尚未完整满足**。历史卡片不是当前报价。本版不接入酒店、火车、路线、订单付款或多用户；现有工具与 Trace 功能保留。新增验收工具及运行方式见 [verification/baseline](verification/baseline/README.md)。真实航班证据保存在 `artifacts/baseline/<session-id>/`，不作为会话数据库。
+正式服务默认使用仓库工作目录下 `.local/sessions.sqlite3` 保存会话，也可用 `TRAVEL_SESSION_DB` 指定独立路径。请保留此目录；其中包含私有对话和模型上下文，不要提交或分享。重启只恢复会话，不自动重放未完成请求。存储失败明确报错；损坏或不支持的数据库不会被空会话替代。结构与验收见 [会话恢复](verification/session-recovery/README.md)。当前恢复覆盖现有航班链路，**B08 的选定项、完整方案仍未实现**。历史卡片不是当前报价。本版不接入酒店、火车、路线、订单付款或多用户；现有工具与 Trace 功能保留。真实航班证据保存在 `artifacts/baseline/<session-id>/`，不作为会话数据库。
 
 ## 真实模型探针
 

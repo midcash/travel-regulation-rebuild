@@ -1,4 +1,4 @@
-"""Supplier tool registry; conversation state belongs to the future runtime."""
+"""Supplier tool registry; the runtime owns conversation persistence."""
 import asyncio
 import copy
 from datetime import date
@@ -65,9 +65,11 @@ class RealTools:
         self._transport_attempts = {}
         self._data = {"tool_mode": "real"}
 
-    def execute(self, name, args, timeout=45):
-        self.calls += 1
-        call_id = f"{self.trace_id}:tool:{self.calls}"
+    def execute(self, name, args, timeout=45, *, call_number=None):
+        if call_number is None:
+            self.calls += 1
+            call_number = self.calls
+        call_id = f"{self.trace_id}:tool:{call_number}"
         if name in {"search_transport", "get_transport_detail", "search_stays", "get_stay_detail", "resolve_place", "calculate_route"}:
             if self.current_date is not None and isinstance(args, dict):
                 date_field = {"search_transport": "departure_date", "search_stays": "check_in"}.get(name)

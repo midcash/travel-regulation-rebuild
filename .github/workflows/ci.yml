@@ -3,7 +3,7 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/session-state-recovery]
 
 permissions:
   contents: read
@@ -37,4 +37,7 @@ jobs:
         run: npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
 
       - name: Offline tool and Pi protocol checks
-        run: python -B -X utf8 scripts/check.py
+        run: python -B -X utf8 scripts/check.py --suite baseline
+
+      - name: Session recovery acceptance contracts (offline)
+        run: python -B -X utf8 scripts/check.py --suite recovery
