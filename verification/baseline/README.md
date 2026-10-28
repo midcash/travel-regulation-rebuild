@@ -51,7 +51,7 @@ python -B -X utf8 verification/baseline/serve_offline.py
 - [B05](../../docs/product-behavior.md#b05-明确修改与条件冲突)：当前没有完整选定项/冲突处理实现与产品验收；[Pi 探针](../pi-step0/test_portable.py) 的条件版本注入只证明协议，不证明业务修改语义。
 - [B06](../../docs/product-behavior.md#b06-比较不等于采纳)：当前没有完整比较/采纳状态与产品验收；不能把探针的选定项注入当作已实现。
 - [B07](../../docs/product-behavior.md#b07-需要的行程形态)：[ToolsContract.test_multi_night_stay_and_detail_keep_dates_unknown_basis_and_raw_rates](../../tests/test_tools_contract.py) 只覆盖底层多晚住宿参数与事实；去返程组合、当天往返和完整方案未接入当前产品。
-- [B08](../../docs/product-behavior.md#b08-刷新与重启后继续)：`Baseline.test_two_turn_query_refresh_date_facts_and_empty_failure` 与上述浏览器流程覆盖进程内刷新；[test_offline_fixture.py](test_offline_fixture.py) 核对读取不新增调用。服务重启恢复尚未实现；Pi 临时 SQLite 恢复与底层工具 snapshot 均不构成产品会话恢复。
+- [B08](../../docs/product-behavior.md#b08-刷新与重启后继续)：本目录覆盖进程内刷新与读取不新增调用；现有航班链路的重启恢复、Pi 上下文和中断检查点验收见 [session-recovery](../session-recovery/README.md)。选定项、完整方案尚未接入，不能据此宣称完整 B08 通过。
 - [B09](../../docs/product-behavior.md#b09-历史依据与当前核验)：[ToolsContract.test_retry_history_tracks_actual_query_and_successful_refresh](../../tests/test_tools_contract.py) 覆盖底层历史与刷新区分，[Provenance](test_review_regressions.py) 核对查询尝试/观察时间。隔日业务回顾、选定项不被刷新替换尚未完整实现/验收。
 - [B10](../../docs/product-behavior.md#b10-制度与预算分开)：当前无制度/预算完整处理与验收证据；[工具注册表](../../travel_agent/real_tools.py) 不提供默认制度查询，不等于已满足完整目标。
 - [B11](../../docs/product-behavior.md#b11-部分失败仍交付可靠成果)：`Baseline.test_local_failures_are_distinct_from_actual_supplier_failure`、[Provenance](test_review_regressions.py) 与 [供应商工具测试](../../tests/test_tools_contract.py) 覆盖错误分类、来源和未知费用；跨航班/酒店的部分交付尚无产品路径与验收证据。
@@ -65,4 +65,4 @@ python -B -X utf8 verification/baseline/serve_offline.py
 
 执行真实查询前先估算费用；未知供应商费用不能写零。凭证只从环境或现有 `.env` 读取，页面和测试输出不显示密钥。此目录不保存真实运行记录。
 
-取消优先执行 Pi `abort()`；已发出的 Python HTTP 请求在供应商超时内收尾，不再回传给模型。收尾期间会话保持忙碌。Worker 在正常完成和可恢复错误后空闲复用，服务关闭时回收；Worker 异常丢失上下文时保留页面成果并要求显式开始新会话。服务重启恢复及 B08 完整验收尚未实现。
+取消优先执行 Pi `abort()`；已发出的 Python HTTP 请求在供应商超时内收尾，不再回传给模型。收尾期间会话保持忙碌。Worker 在正常完成和可恢复错误后空闲复用，服务关闭时回收；Worker 异常丢失上下文时保留页面成果。持久化与重启恢复边界见 [session-recovery](../session-recovery/README.md)；B08 完整业务验收仍未完成。

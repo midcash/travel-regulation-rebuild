@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 const busyStates = new Set(['running', 'cancelling']);
+const retiredSessions = new Set();
 let current = null, submitting = false, lastKey = '';
 const text = (tag, value, cls) => { const el = document.createElement(tag); el.textContent = value ?? ''; if (cls) el.className = cls; return el; };
 const busy = () => submitting || busyStates.has(current?.run?.status);
@@ -46,7 +47,10 @@ function renderResults(results, parent) {
 }
 
 function render(state) {
+  if (retiredSessions.has(state.session_id)) return;
+  if (current?.session_id === state.session_id && state.revision < current.revision) return;
   const changedSession = current && current.session_id !== state.session_id;
+  if (changedSession) retiredSessions.add(current.session_id);
   current = state;
   const hasMessages = state.messages.length > 0;
   $('content').classList.toggle('has-messages', hasMessages);

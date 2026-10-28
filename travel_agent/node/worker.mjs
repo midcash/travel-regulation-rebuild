@@ -5,6 +5,8 @@ import * as ai from '@earendil-works/pi-ai';
 
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 const pending = new Map();
+let manager;
+const entries = () => manager.getEntries();
 let session, runtime, faux, commandId, busy = false, cancelled = false, modelCalls = 0;
 
 function requestTool(id, name, args, signal) {
@@ -13,7 +15,7 @@ function requestTool(id, name, args, signal) {
     if (signal?.aborted) return abort();
     pending.set(id, value => { signal?.removeEventListener('abort', abort); resolve(value); });
     signal?.addEventListener('abort', abort, {once: true});
-    emit({type: 'tool_request', id, name, args, commandId});
+    emit({type: 'tool_request', id, name, args, commandId, entries: entries()});
   });
 }
 
@@ -38,9 +40,15 @@ async function initialize(c) {
   runtime.streamSimple = (m, context, options) => {
     if (cancelled || ++modelCalls > 4) throw new Error('Run stopped or model call limit exceeded');
     emit({type: 'model_start', commandId, call: modelCalls});
-    const source = stream(m, context, {...options, maxTokens: Math.min(options?.maxTokens ?? 2048, 2048)});
     const output = ai.createAssistantMessageEventStream();
     void (async () => {
+      const id = 'checkpoint-' + crypto.randomUUID();
+      await new Promise(resolve => {
+        pending.set(id, resolve);
+        emit({type: 'checkpoint', id, entries: entries(), commandId});
+      });
+      if (cancelled) throw new Error('Run stopped');
+      const source = stream(m, context, {...options, maxTokens: Math.min(options?.maxTokens ?? 2048, 2048)});
       for await (const event of source) output.push(event);
       output.end(await source.result());
     })().catch(error => {
@@ -60,9 +68,10 @@ async function initialize(c) {
   const customTools = c.tools.map(t => ({...t, label: t.name,
     execute: async (id, args, signal) => ({content: [{type: 'text', text: JSON.stringify(await requestTool(id, t.name, args, signal))}], details: {}}),
   }));
+  manager = sdk.SessionManager.inMemory(process.cwd(), undefined, c.entries);
   ({session} = await sdk.createAgentSession({cwd: process.cwd(), agentDir: process.env.PI_CODING_AGENT_DIR,
     model, modelRuntime: runtime, thinkingLevel: 'off', resourceLoader, customTools,
-    tools: customTools.map(t => t.name), sessionManager: sdk.SessionManager.inMemory(),
+    tools: customTools.map(t => t.name), sessionManager: manager,
     settingsManager: sdk.SettingsManager.inMemory({compaction: {enabled: false},
       retry: {enabled: false, provider: {maxRetries: 0}}, cacheWarming: 'off', defaultTools: []})}));
   session.subscribe(e => {
@@ -77,6 +86,8 @@ async function initialize(c) {
 }
 
 async function handle(c) {
+  if (c.op === 'storage_failed') { cancelled = true; await session?.abort(); return; }
+  if (c.op === 'checkpoint_ack') { const resolve = pending.get(c.id); pending.delete(c.id); resolve?.(); return; }
   if (c.op === 'tool_result') { const resolve = pending.get(c.id); pending.delete(c.id); resolve?.(c.result); return; }
   try {
     let result;
@@ -89,9 +100,13 @@ async function handle(c) {
           r.tool ? ai.fauxToolCall(r.tool, r.args) : (r.text || ''),
           {stopReason: r.error ? 'error' : (r.tool ? 'toolUse' : 'stop'), errorMessage: r.error})));
         await session.prompt(c.text); await session.waitForIdle();
-        result = {modelCalls};
+        result = {modelCalls, entries: entries()};
       } finally { busy = false; }
-    } else if (c.op === 'cancel') { cancelled = true; await session?.abort(); result = {cancelled: true}; }
+    } else if (c.op === 'cancel') {
+      cancelled = true;
+      for (const [id, resolve] of pending) if (id.startsWith('checkpoint-')) { pending.delete(id); resolve(); }
+      await session?.abort(); result = {cancelled: true};
+    }
     else if (c.op === 'shutdown') {
       cancelled = true; await session?.abort(); session?.dispose();
       emit({type: 'done', id: c.id, result: {closed: true}}); process.exit(0);

@@ -94,13 +94,14 @@ class Service:
             raise AssertionError(f"Expected accepted message, got {response.status_code}: {response.text}")
         return response.json()
 
-    def wait(self, predicate, description, timeout=20):
+    def wait(self, predicate, description, timeout=95):
+        # The product owns a 90s run budget, including cold Node/Pi startup.
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if predicate():
                 return
             time.sleep(.04)
-        raise AssertionError(f"Timed out waiting for {description}")
+        raise AssertionError(f"Timed out waiting for {description}; state={self.state()}")
 
     def turn(self, text):
         self.send(text)
@@ -285,7 +286,9 @@ class RecoveryAcceptance(unittest.TestCase):
         after = self.service.turn("查杭州明天去三亚的航班")
         self.assertEqual(after["run"]["results"][0]["data"]["departure_date"], "2026-10-21")
         self.assertEqual(after["messages"][:2], before["messages"])
-        self.assertIn("2026-10-20T10:00:00+08:00", self.service.records("model")[-2]["messages"][-1]["content"])
+        content = self.service.records("model")[-2]["messages"][-1]["content"]
+        text = content if isinstance(content, str) else "".join(block.get("text", "") for block in content)
+        self.assertIn("2026-10-20T10:00:00+08:00", text)
 
     def test_A6_explicit_new_session_is_durable_without_deleting_old_records(self):
         old = self.service.turn(FULL_QUERY)

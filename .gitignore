@@ -17,3 +17,4 @@ node_modules/
 
 # Retired experiments may still contain private, untracked local data.
 /experiments/
+/.local/
