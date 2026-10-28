@@ -5,7 +5,7 @@ are synthetic; assertions inspect the actual context sent by Node/Pi.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 import json
 import os
 from pathlib import Path
@@ -300,7 +300,7 @@ class RecoveryAcceptance(unittest.TestCase):
         self.assertEqual(self.service.state(), new)
         self.assert_no_calls((2, 1))
         # Inspect a logical dump instead of pinning storage table/column names.
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             dump = "\n".join(connection.iterdump())
         self.assertIn(old["session_id"], dump)
         self.assertIn("OFFLINE-101", dump)
@@ -459,7 +459,7 @@ class InvalidStorageAcceptance(unittest.TestCase):
 
     def test_A7_newer_schema_version_is_not_migrated_or_overwritten(self):
         def prepare(path):
-            with sqlite3.connect(path) as connection:
+            with closing(sqlite3.connect(path)) as connection, connection:
                 connection.execute("PRAGMA user_version = 999999")
                 connection.execute("CREATE TABLE future_private_state(value TEXT)")
                 connection.execute("INSERT INTO future_private_state VALUES ('synthetic-preserve-me')")
