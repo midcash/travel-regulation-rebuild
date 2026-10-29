@@ -88,8 +88,11 @@ class DurableContracts(unittest.TestCase):
         self.assertEqual(restored.call("snapshot")["plan"], PLAN)
         restored.call("prompt", text="recall", requestId="recall")
         request = json.dumps(self.ledger.read("model")[-1]["request"], ensure_ascii=False)
+        systems = [m for m in self.ledger.read("model")[-1]["request"]["messages"] if m["role"] == "system"]
+        plan_section = next(m["sections"]["trip-plan"] for m in systems if "trip-plan" in m.get("sections", {}))
         for value in ("chosen-A", "suggested-B", "OFFLINE-101", "2026-10-29T10:00:00+08:00"):
             self.assertIn(value, request)
+            self.assertIn(value, plan_section)
         self.assertCounts(3, 1)
 
     def test_v3_document_and_transcript_are_atomic_before_and_after_commit(self):
@@ -164,6 +167,11 @@ class DurableContracts(unittest.TestCase):
         node.result(pending)
         node.call("idle")
         state = node.call("snapshot")
+        batches = [p for p in state["publications"] if any(c["type"] == "entry" and
+                   c["value"]["kind"] == "probe.plan-change" for c in p["changes"])]
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(sum(c["type"] == "document" and c["record"]["kind"] == "probe.trip-plan"
+                             for c in batches[0]["changes"]), 1)
         self.assertTrue(any(e["kind"] == "probe.plan-change" for v in state["views"] for e in v["entries"]))
         self.assertTrue(all(b > a for a, b in zip(state["sequences"], state["sequences"][1:])))
         last = state["sequences"][-1]
@@ -195,3 +203,69 @@ class DurableContracts(unittest.TestCase):
                     self.assertEqual(result["emptySessionCreated"], False)
                 finally:
                     broken.kill()
+
+    def test_v1_conflicting_request_id_reuses_original_and_interrupted_retry_deduplicates(self):
+        node = self.node()
+        first = node.call("prompt", text="first", requestId="conflict")
+        self.assertEqual(node.call("prompt", text="different body", requestId="conflict"), first)
+        self.assertCounts(1, 0)
+        node.hold("model:cut")
+        node.begin("prompt", text="cut", requestId="cut")
+        node.until(lambda: self.ledger.counts() == (2, 0))
+        node.kill()
+        restored = self.node()
+        restored.call("resume")
+        self.assertEqual(restored.call("prompt", text="cut", requestId="cut")["status"], "done")
+        self.assertCounts(3, 0)
+
+    def test_v2_completed_tool_in_same_round_is_not_replayed(self):
+        node = self.node()
+        node.hold("tool:chain-cut")
+        node.begin("prompt", text="chain", requestId="chain", scenario="multi")
+        node.until(lambda: self.ledger.counts() == (1, 2))
+        node.kill()
+        restored = self.node()
+        restored.call("resume")
+        restored.call("idle")
+        self.assertCounts(2, 3)
+        self.assertEqual([r["args"]["tag"] for r in self.ledger.read("tool")],
+                         ["chain-completed", "chain-cut", "chain-cut"])
+
+    def test_v3_kill_inside_sql_transaction_rolls_back_both_writes(self):
+        node = self.node(commitGate="inside")
+        node.hold("commit:inside")
+        node.begin("prompt", text="plan", requestId="plan", scenario="plan")
+        node.until(lambda: any(e.get("gate") == "commit:inside" for e in node.events))
+        node.kill()
+        restored = self.node()
+        state = restored.call("snapshot")
+        self.assertIsNone(state["plan"])
+        self.assertEqual(sum(e["kind"] == "probe.plan-change" for e in state["entries"]), 0)
+        self.assertCounts(1, 1)
+
+    def test_v4_explicit_background_abort_cancels_timer(self):
+        node = self.node()
+        task = node.call("timer", until=int(time.time() * 1000) + 60000)
+        node.call("abort", background=True)
+        self.assertEqual(node.call("task", taskId=task)["state"]["outcome"]["status"], "aborted")
+        node.kill()
+        restored = self.node()
+        restored.call("resume")
+        restored.call("idle")
+        self.assertEqual(restored.call("task", taskId=task)["state"]["outcome"]["status"], "aborted")
+        self.assertEqual(len(self.ledger.read("timer")), 0)
+        self.assertCounts(0, 0)
+
+    def test_v6_storage_failure_does_not_publish_uncommitted_plan(self):
+        node = self.node(failCommit=True)
+        node.call("watch")
+        with self.assertRaises(AssertionError):
+            node.call("prompt", text="plan", requestId="plan", scenario="plan")
+        node.until(lambda: any(e.get("info", {}).get("type") == "session_failed" for e in node.events))
+        self.assertFalse(any(e["kind"] == "probe.plan-change"
+                             for v in node.call("views")["views"] for e in v["entries"]))
+        node.kill()
+        restored = self.node()
+        self.assertIsNone(restored.call("snapshot")["plan"])
+        self.assertEqual(sum(e["kind"] == "probe.plan-change" for e in restored.call("snapshot")["entries"]), 0)
+        self.assertCounts(1, 1)
