@@ -21,6 +21,8 @@ class Ledger:
         with self.lock, self.path.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record, ensure_ascii=False) + "\n")
             stream.flush()
+            # Only synthetic peer data enters this ledger. CI retains the same evidence.
+            print("DURABLE_LEDGER " + json.dumps(record, ensure_ascii=False), flush=True)
 
     def read(self, kind=None):
         with self.lock:
@@ -137,7 +139,11 @@ class Node:
             gate.set()
         for thread in self.threads:
             thread.join(timeout=2)
-        self.process.stdin.close()
+        try:
+            self.process.stdin.close()
+        except OSError:
+            # Windows can report EINVAL while flushing the pipe of the killed process.
+            pass
         self.reader.join(timeout=2)
         self.process.stdout.close()
         self.log.close()
