@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@earendil-works/chord": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-durable": "1.4.0",
+    "travel-agent-runtime": "file:../.."
+  },
+  "name": "travel-durable-step0",
+  "private": true,
+  "type": "module"
+}

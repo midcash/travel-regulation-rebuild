@@ -36,5 +36,8 @@ jobs:
       - name: Install locked Pi dependencies
         run: npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
 
-      - name: Offline tool and Pi protocol checks
+      - name: Install locked Durable dependencies
+        run: npm.cmd ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
+
+      - name: Offline tool, Pi and Durable checks
         run: python -B -X utf8 scripts/check.py
