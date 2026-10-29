@@ -14,7 +14,7 @@ python -B -X utf8 -m unittest discover -s verification/durable-step0 -v
 python -B -X utf8 scripts/check.py
 ```
 
-默认检查包括原有 35 项工具测试、7 项 Pi 协议测试、21 项基线检查，以及本套件。CI 在 Windows、Node 22.19.0、Python 3.11 上由 PR 触发。本机验证使用 Windows、Node 22.20.0、Python 3.12。
+默认检查包括原有 35 项工具测试、7 项 Pi 协议测试、21 项基线检查，以及本套件 15 项。CI 的默认检查运行于 Windows、Node 22.19.0、Python 3.11；补充 Durable 矩阵为 Ubuntu + Node 22.19.0、Ubuntu + Node 24、Windows + Node 24，均由 PR 触发。本机验证使用 Windows、Node 22.20.0、Python 3.11.11。最终远端结果见 PR。此次本机只有 Docker 的 WSL 发行版，Docker daemon 未运行，没有将本机 Linux 计为已验证。
 
 每次测试都由 TemporaryDirectory 新建目录和 SQLite 库，只在该测试的重启之间复用。没有接收外部数据库路径的入口，不读取 .env、experiments 或历史库。Python 在同一把锁下读写 JSONL 调用账本，模型和工具每次调用均先记账，再让合成操作继续。`DURABLE_LEDGER` 行将相同合成证据输出到 CI 日志，不提交本机记录。子进程只继承运行所需环境变量，不继承模型凭证。Node 的 fetch、HTTP 和 socket 连接被禁止；负向测试主动尝试三个连接入口并断言全部阻止。依赖安装需要访问 npm，验收用例完全离线、模型和供应商费用为零。
 
@@ -28,6 +28,20 @@ python -B -X utf8 scripts/check.py
 - V4 通过：`test_v4_restart_before_deadline` 与 `test_v4_restart_after_deadline`。真实时间、持久化 sleepUntil、后台任务，到期前强杀后分别在到期前和到期后重启。每个场景 timer 账本精确为 1；第三次打开仍为 1，模型/工具均为 (0, 0)。任务不阻塞 idle，普通 abort 后仍 sleeping。此验证不承诺任意外部副作用在“已执行、未提交结果”间再次崩溃也恰好一次。
 - V5 通过：`test_v5_network_is_denied_and_versions_are_exact` 与默认检查。只安装 faux provider，Python 工具返回固定合成事实；不调用模型网络或真实供应商，不把 skipped 当通过。
 - V6 通过：`test_v6_watch_only_committed_and_sequence_survives_restart`。存储提交被拦在前侧时 watch 看不到新记录，提交后可见，强杀重启后记录不回退。subscribeCommits 的 publication.seq 单调递增，新进程第一次提交序号大于旧进程最后序号。1.4.0 的 viewState/watch 值本身**不附带 seq 或 epoch**；可用机制是框架的持久化提交 seq，后续传输层需要绑定 publication 和状态，不能直接用客户端自增序号替代。未实现前端同步。
+
+补充边界测试验证同一轮中的已完成工具不重放、模型中断后重复提交去重、SQL 事务内部强杀回滚、显式 background abort 能取消定时器，以及存储失败不会发布未提交方案。V3 另精确检查 provider 请求的系统提示 trip-plan 片段；V6 检查同一个 publication 中恰有一份方案文档和变更记录。测试增强单独提交 `982e3a2`，没有移除或放宽原断言。实际观察到相同 requestId 携带不同正文也会返回原 submission，不会报冲突；未来应用若需拒绝 ID 误用，应在边界明确约束。
+
+## Ego Lite 实际浏览器验收
+
+运行 `python -B -X utf8 verification/durable-step0/serve.py`，打开输出的本机地址。该入口每次自动新建临时目录，没有 --root 参数；只有本次 Node 重启会沿用同一个临时库。页面是探针检查页，使用真实浏览器、HTTP、Node、Pi Durable、SQLite 和 Python 合成工具；不是产品页面，也不替代产品 B08 验收。用完可从同源页面 POST /stop 回收服务和临时库。
+
+本次 Codex + Ego Lite 实际操作如下：
+
+1. 输入“查询杭州到三亚的航班”，选择合成航班场景提交，实际账本计数 (2, 1)。刷新、点击“强杀 Node 并恢复”、再次提交同一请求 ID；每次计数仍为 (2, 1)，程序断言恢复前后 entries 深度相等。
+2. 输入“保留已选航班 A、推荐 B 和带时间的历史查询”，新 requestId，选择 TripPlan 场景；计数 (4, 2)。强杀恢复后文档和 entries 深度相等，页面可见三类独立字段及未知价格 null。普通对话输入“回顾当前方案”，计数 (5, 2)。
+3. 点击“三秒后台定时器”，观察 sleeping；强杀恢复后完成，再强杀恢复，仍为同一 completed 任务，模型/工具仍 (5, 2)。服务独立账本最终精确为模型 5、工具 2、timer 1、强杀 5（含退出清理）。
+
+以上有真实页面快照、浏览器内断言和服务账本交叉核对。截图请求因窗口最小化失败，窗口控制接口报错，本次无截图，不声称完成像素级视觉验收。浏览器任务已关闭，服务已停止。用例期间没有真实模型或供应商网络调用；浏览器只访问本机 HTTP。本次不测试产品页面或 SSE。
 
 ## 四个观察项
 

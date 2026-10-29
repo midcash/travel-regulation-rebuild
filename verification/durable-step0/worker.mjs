@@ -33,7 +33,8 @@ const {createModels} = await import('@earendil-works/pi-ai/models');
 const {fauxProvider, fauxAssistantMessage, fauxToolCall} = await import('@earendil-works/pi-ai/providers/faux');
 const {Harness, createRegistry, defineDoc, defineEntry, defineExtension, defineTool, defineTask, section} =
   await import('@earendil-works/pi-durable');
-const {openNodeSqliteStorage} = await import('@earendil-works/pi-durable/storage/sqlite/node');
+const {openNodeSqliteStorage, openNodeSqliteDatabase} = await import('@earendil-works/pi-durable/storage/sqlite/node');
+const {SqliteStorage} = await import('@earendil-works/pi-durable/storage/sqlite');
 
 const PLAN = {selected: {flight: 'chosen-A'}, recommendations: [{flight: 'suggested-B'}],
   history: [{flight: 'OFFLINE-101', price: null, queriedAt: '2026-10-29T10:00:00+08:00'}]};
@@ -112,6 +113,10 @@ async function initialize(command) {
     const answeredTool = request.messages.slice(request.messages.indexOf(user) + 1)
       .some(m => m.role === 'toolResult');
     if (answeredTool || !input.scenario) return fauxAssistantMessage('Synthetic answer.');
+    if (input.scenario === 'multi') return fauxAssistantMessage([
+      fauxToolCall('search_flights', {tag: 'chain-completed'}),
+      fauxToolCall('search_flights', {tag: 'chain-cut'}),
+    ], {stopReason: 'toolUse'});
     const name = {safe: 'search_flights', unsafe: 'unsafe_effect', plan: 'write_plan'}[input.scenario];
     return fauxAssistantMessage(fauxToolCall(name, {tag: input.tag}), {stopReason: 'toolUse'});
   };
@@ -127,17 +132,28 @@ async function initialize(command) {
     })],
   });
   registry.install(extension);
-  const storage = await openNodeSqliteStorage('session.sqlite');
+  const database = await openNodeSqliteDatabase('session.sqlite');
+  const storage = await SqliteStorage.open(database);
+  let insidePlanCommit = false;
+  const transaction = database.transaction.bind(database);
+  database.transaction = change => transaction(async tx => {
+    const result = await change(tx);
+    if (insidePlanCommit && commitGate === 'inside') await rpc('gate', {gate: 'commit:inside'});
+    return result;
+  });
   // Instrument only the persistence boundary, without changing the batch or its semantics.
   const commit = storage.commit.bind(storage);
   storage.commit = async (writes, ctx) => {
     const targeted = writes.some(w => w.type === 'entry' && w.value.kind === 'probe.plan-change');
     if (targeted && commitGate === 'before') await rpc('gate', {gate: 'commit:before'});
+    if (targeted && command.failCommit) throw new Error('Synthetic storage write failure');
+    insidePlanCommit = targeted;
     const seq = await commit(writes, ctx);
+    insidePlanCommit = false;
     if (targeted && commitGate === 'after') await rpc('gate', {gate: 'commit:after'});
     return seq;
   };
-  harness = await Harness.open(storage, {models, registry, settings: {retry: {maxRetries: 0}},
+  harness = await Harness.open(storage, {models, registry, settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
     onReport: (error, info) => emit({kind: 'report', error: String(error), info})}, context);
   harness.subscribeCommits(publication => {
     sequences.push(publication.seq);
@@ -166,7 +182,7 @@ async function handle(c) {
       }
       case 'resume': harness.resume(); break;
       case 'idle': await root.waitForIdle(context); break;
-      case 'abort': await root.abort(context); break;
+      case 'abort': await root.abort(context, {background: c.background ?? false}); break;
       case 'task': result = await harness.getTask(c.taskId, context); break;
       case 'waitTask': result = await harness.waitForTask(c.taskId, context); break;
       case 'timer': {
