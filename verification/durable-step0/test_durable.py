@@ -1,6 +1,7 @@
 """Issue #44 contracts. Every test owns a fresh temporary SQLite store; no live peers."""
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -115,26 +116,30 @@ class DurableContracts(unittest.TestCase):
                     restored.kill()
 
     def timer_case(self, late):
-        node = self.node()
-        until = int(time.time() * 1000) + 6000
+        node = self.node(clockMs=1000000)
+        until = 1001000
         task = node.call("timer", until=until)
         node.call("idle")
         node.call("abort")
         self.assertEqual(node.call("task", taskId=task)["state"]["status"], "sleeping")
         node.kill()
-        if late:
-            time.sleep(max(0, until / 1000 - time.time()) + .1)
-        restored = self.node()
-        started = time.time() * 1000
+        started = until + 100 if late else until - 500
+        restored = self.node(clockMs=started)
         self.assertEqual(started > until, late)
         restored.call("resume")
+        if not late:
+            restored.call("idle")
+            restored.call("clock", now=until - 1)
+            self.assertEqual(len(self.ledger.read("timer")), 0)
+            self.assertEqual(restored.call("task", taskId=task)["state"]["status"], "sleeping")
+            restored.call("clock", now=until)
         outcome = restored.call("waitTask", taskId=task)
         self.assertEqual(outcome["state"]["outcome"]["status"], "completed")
         calls = self.ledger.read("timer")
         self.assertEqual(len(calls), 1)
-        self.assertTrue(until <= calls[0]["at"] <= max(until, started) + 3000)
+        self.assertEqual(calls[0]["at"], max(until, started))
         restored.kill()
-        again = self.node()
+        again = self.node(clockMs=until + 200)
         again.call("resume")
         again.call("idle")
         self.assertEqual(len(self.ledger.read("timer")), 1)
@@ -200,7 +205,15 @@ class DurableContracts(unittest.TestCase):
                 try:
                     result = broken.call("invalidStorage")
                     self.assertEqual(result["rejected"], True)
-                    self.assertEqual(result["emptySessionCreated"], False)
+                    self.assertTrue(result["error"])
+                    path = Path(folder) / "session.sqlite"
+                    if mode == "corrupt":
+                        self.assertEqual(path.read_bytes(), b"not a SQLite file")
+                    else:
+                        with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
+                            self.assertEqual(db.execute("SELECT version FROM durable_schema").fetchone(), (999999,))
+                            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                            self.assertEqual(tables, {"durable_schema"})
                 finally:
                     broken.kill()
 
@@ -254,6 +267,14 @@ class DurableContracts(unittest.TestCase):
         restored.call("idle")
         self.assertEqual(restored.call("task", taskId=task)["state"]["outcome"]["status"], "aborted")
         self.assertEqual(len(self.ledger.read("timer")), 0)
+        self.assertCounts(0, 0)
+
+    def test_v4_past_deadline_returns_completed_task(self):
+        node = self.node(clockMs=2000)
+        task = node.result(node.begin("timer", until=1000), timeout=5)
+        settled = node.call("waitTask", taskId=task)
+        self.assertEqual(settled["state"]["outcome"]["status"], "completed")
+        self.assertEqual([r["at"] for r in self.ledger.read("timer")], [2000])
         self.assertCounts(0, 0)
 
     def test_v6_storage_failure_does_not_publish_uncommitted_plan(self):
