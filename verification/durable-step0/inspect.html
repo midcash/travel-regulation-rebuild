@@ -22,6 +22,7 @@ const byId=id=>document.getElementById(id);
 let busy=false;
 async function refresh(){
   const response=await fetch('/state');
+  if(!response.ok)throw new Error(`状态读取失败 (${response.status})`);
   const state=await response.json();
   window.probeState=state;
   byId('counts').textContent=`模型调用 ${state.counts[0]} · Python 工具调用 ${state.counts[1]}`;
@@ -31,20 +32,33 @@ async function refresh(){
   byId('transcript').textContent=state.entries.filter(e=>['pi.user','pi.assistant','probe.plan-change'].includes(e.kind))
     .map(e=>`${e.kind}\n${JSON.stringify(e.model ?? e.data)}`).join('\n\n');
 }
+function showError(error){
+  byId('status').textContent=String(error);
+  byId('status').dataset.failed='true';
+}
+async function refreshIdle(){
+  try{
+    await refresh();
+    if(byId('status').dataset.failed || byId('status').textContent==='加载中'){
+      byId('status').textContent='就绪';
+      delete byId('status').dataset.failed;
+    }
+  }catch(error){showError(error);}
+}
 async function action(url,data){
   if(busy)return;
-  busy=true;byId('status').textContent='运行中';
+  busy=true;byId('status').textContent='运行中';delete byId('status').dataset.failed;
   try{
     const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     const result=await response.json();
     if(!response.ok)throw new Error(result.error);
     await refresh();byId('status').textContent='已完成';
-  }catch(error){byId('status').textContent=String(error);}
+  }catch(error){showError(error);}
   finally{busy=false;}
 }
 byId('submit').onclick=()=>action('/prompt',{text:byId('text').value,requestId:byId('request').value,scenario:byId('scenario').value});
 byId('restart').onclick=()=>action('/restart',{});
 byId('timer').onclick=()=>action('/timer',{});
-refresh().then(()=>{byId('status').textContent='就绪';});
-setInterval(()=>{if(!busy)refresh().catch(error=>{byId('status').textContent=String(error);});},1000);
+refreshIdle();
+setInterval(()=>{if(!busy)refreshIdle();},1000);
 </script></html>

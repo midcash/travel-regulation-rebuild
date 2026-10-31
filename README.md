@@ -29,10 +29,11 @@
 python -m pip install -e .
 npm.cmd ci --ignore-scripts --no-audit --no-fund
 npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
+npm.cmd ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
 python scripts/check.py
 ```
 
-默认检查运行工具测试与 Pi 离线进程测试，不需要真实密钥，不调用在线供应商，也不产生真实模型费用。测试通过不等于正式产品或真实端到端验收通过。
+默认检查运行工具测试、Pi 离线进程测试与 [Durable 隔离探针](verification/durable-step0/README.md)，不需要真实密钥，不调用在线供应商，也不产生真实模型费用。测试通过不等于正式产品或真实端到端验收通过。
 
 ## 运行浏览器基线
 

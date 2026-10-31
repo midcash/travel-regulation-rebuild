@@ -49,10 +49,13 @@ jobs:
         include:
           - os: ubuntu-latest
             node: "22.19.0"
+            npm: npm
           - os: ubuntu-latest
             node: "24"
+            npm: npm
           - os: windows-latest
             node: "24"
+            npm: npm.cmd
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
@@ -64,6 +67,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: Install locked Durable dependencies
-        run: npm ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
+        run: ${{ matrix.npm }} ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
       - name: Offline Durable platform boundaries
         run: python -B -X utf8 -m unittest discover -s verification/durable-step0 -v

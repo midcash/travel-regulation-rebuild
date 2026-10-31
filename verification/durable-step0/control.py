@@ -39,6 +39,8 @@ class Node:
         self.root, self.ledger = root, ledger
         self.events, self.replies = [], queue.Queue()
         self.send_lock = threading.Lock()
+        self.receive_lock = threading.Lock()
+        self.buffered, self.exit_event = {}, None
         self.gates = {}
         self.threads = []
         self.serial = 0
@@ -65,16 +67,21 @@ class Node:
         self.gates[name].set()
 
     def _read(self):
-        for line in self.process.stdout:
-            event = json.loads(line)
-            self.events.append(event)
-            if event.get("rpc"):
-                thread = threading.Thread(target=self._peer, args=(event,), daemon=True)
-                self.threads.append(thread)
-                thread.start()
-            else:
-                self.replies.put(event)
-        self.replies.put({"exit": True})
+        terminal = {"exit": True}
+        try:
+            for line in self.process.stdout:
+                event = json.loads(line)
+                self.events.append(event)
+                if event.get("rpc"):
+                    thread = threading.Thread(target=self._peer, args=(event,), daemon=True)
+                    self.threads.append(thread)
+                    thread.start()
+                elif "id" in event:
+                    self.replies.put(event)
+        except Exception as error:
+            terminal["error"] = f"Node reader failed: {error}"
+        finally:
+            self.replies.put(terminal)
 
     def _peer(self, event):
         kind = event["kind"]
@@ -101,15 +108,22 @@ class Node:
 
     def result(self, serial, timeout=25):
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            event = self.replies.get(timeout=max(.01, deadline - time.monotonic()))
-            if event.get("exit"):
-                raise AssertionError("Node exited; inspect this test's temporary stderr")
-            if event.get("id") == serial:
-                if "error" in event:
-                    raise AssertionError(event["error"])
-                return event["result"]
-        raise AssertionError("Node response timed out")
+        with self.receive_lock:
+            while serial not in self.buffered:
+                if self.exit_event is not None:
+                    raise AssertionError(self.exit_event.get("error", "Node exited; inspect this test's temporary stderr"))
+                try:
+                    event = self.replies.get(timeout=max(0, deadline - time.monotonic()))
+                except queue.Empty:
+                    raise AssertionError(f"Node request {serial} timed out") from None
+                if event.get("exit"):
+                    self.exit_event = event
+                else:
+                    self.buffered[event["id"]] = event
+            event = self.buffered.pop(serial)
+            if "error" in event:
+                raise AssertionError(event["error"])
+            return event["result"]
 
     def call(self, op, **values):
         return self.result(self.begin(op, **values))

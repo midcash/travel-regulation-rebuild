@@ -29,7 +29,15 @@ def main():
                 self.end_headers()
                 self.wfile.write(body)
 
+            def allowed_origin(self):
+                host = f"127.0.0.1:{server.server_port}"
+                expected = "http://" + host
+                return self.headers.get("Host") == host and self.headers.get("Origin", expected) == expected
+
             def do_GET(self):
+                if not self.allowed_origin():
+                    self.send_error(403)
+                    return
                 if self.path == "/":
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -48,8 +56,7 @@ def main():
 
             def do_POST(self):
                 nonlocal node, timer
-                expected = "http://" + self.headers.get("Host", "")
-                if self.headers.get("Origin", expected) != expected:
+                if not self.allowed_origin():
                     self.send_error(403)
                     return
                 size = int(self.headers.get("Content-Length", "0"))

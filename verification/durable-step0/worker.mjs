@@ -43,6 +43,18 @@ const TripPlan = defineDoc({kind: 'probe.trip-plan', version: 1, scope: 'convers
   checkpointWhen: () => false});
 const PlanChange = defineEntry('probe.plan-change');
 let harness, root, invalidResult, commitGate;
+let controlledNow;
+const clockTimers = new Map();
+function advanceClock(now) {
+  if (controlledNow === undefined) throw new Error('Controlled clock is not enabled');
+  if (!Number.isFinite(now) || now < controlledNow) throw new Error('Clock must advance monotonically');
+  controlledNow = now;
+  for (const [token, timer] of clockTimers) {
+    if (timer.at > now) continue;
+    clockTimers.delete(token);
+    timer.callback();
+  }
+}
 const sequences = [], publications = [], views = [];
 const Timer = defineTask({name: 'probe.timer', version: 1, initial: () => ({phase: 'arm'}),
   phases: {
@@ -86,6 +98,7 @@ function makeTool(name, safe) {
 
 async function initialize(command) {
   commitGate = command.commitGate;
+  controlledNow = command.clockMs;
   if (command.invalid) {
     if (command.invalid === 'corrupt') fs.writeFileSync('session.sqlite', 'not a SQLite file');
     else {
@@ -98,9 +111,9 @@ async function initialize(command) {
     try {
       const storage = await openNodeSqliteStorage('session.sqlite');
       await storage.close();
-      invalidResult = {rejected: false, emptySessionCreated: true};
+      invalidResult = {rejected: false};
     } catch (error) {
-      invalidResult = {rejected: true, emptySessionCreated: false, error: String(error)};
+      invalidResult = {rejected: true, error: String(error)};
     }
     return {};
   }
@@ -153,7 +166,15 @@ async function initialize(command) {
     if (targeted && commitGate === 'after') await rpc('gate', {gate: 'commit:after'});
     return seq;
   };
-  harness = await Harness.open(storage, {models, registry, settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
+  const clock = controlledNow === undefined ? {} : {
+    now: () => controlledNow,
+    setTimer: (callback, delayMs) => {
+      const token = Symbol();
+      clockTimers.set(token, {at: controlledNow + delayMs, callback});
+      return () => clockTimers.delete(token);
+    },
+  };
+  harness = await Harness.open(storage, {models, registry, ...clock, settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
     onReport: (error, info) => emit({kind: 'report', error: String(error), info})}, context);
   harness.subscribeCommits(publication => {
     sequences.push(publication.seq);
@@ -181,6 +202,7 @@ async function handle(c) {
         break;
       }
       case 'resume': harness.resume(); break;
+      case 'clock': advanceClock(c.now); result = {now: controlledNow}; break;
       case 'idle': await root.waitForIdle(context); break;
       case 'abort': await root.abort(context, {background: c.background ?? false}); break;
       case 'task': result = await harness.getTask(c.taskId, context); break;
@@ -189,8 +211,13 @@ async function handle(c) {
         result = await root.commit(tx => tx.createTask(Timer, {until: c.until},
           {ownership: {kind: 'conversation'}, background: true}), context);
         harness.resume();
-        while ((await harness.getTask(result, context)).state.status !== 'sleeping')
+        const deadline = performance.now() + 5000;
+        while (true) {
+          const {status} = (await harness.getTask(result, context)).state;
+          if (status === 'sleeping' || status === 'terminal') break;
+          if (performance.now() >= deadline) throw new Error('Timer did not reach sleeping or terminal within 5 seconds');
           await new Promise(resolve => setTimeout(resolve, 5));
+        }
         break;
       }
       case 'watch': {
