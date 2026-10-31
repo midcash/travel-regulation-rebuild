@@ -1,4 +1,5 @@
 """Issue #44 contracts. Every test owns a fresh temporary SQLite store; no live peers."""
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -210,7 +211,7 @@ class DurableContracts(unittest.TestCase):
                     if mode == "corrupt":
                         self.assertEqual(path.read_bytes(), b"not a SQLite file")
                     else:
-                        with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
+                        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as db:
                             self.assertEqual(db.execute("SELECT version FROM durable_schema").fetchone(), (999999,))
                             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                             self.assertEqual(tables, {"durable_schema"})

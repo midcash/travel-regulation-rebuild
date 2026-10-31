@@ -29,7 +29,8 @@ class ProtocolReplies(unittest.TestCase):
 
     def test_reader_failure_wakes_callers_and_preserves_prior_reply(self):
         node = self.node()
-        node.process = SimpleNamespace(stdout=io.StringIO('{"id":1,"result":"saved"}\ninvalid JSON\n'))
+        node.process = SimpleNamespace(stdout=io.StringIO(
+            '{"id":1,"result":"saved"}\n{"kind":"bridge-abort"}\ninvalid JSON\n'))
         try:
             node._read()
         except ValueError:
