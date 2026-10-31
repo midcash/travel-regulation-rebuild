@@ -39,11 +39,11 @@ function showError(error){
 async function refreshIdle(){
   try{
     await refresh();
-    if(byId('status').dataset.failed || byId('status').textContent==='加载中'){
+    if(byId('status').dataset.failed==='poll' || byId('status').textContent==='加载中'){
       byId('status').textContent='就绪';
       delete byId('status').dataset.failed;
     }
-  }catch(error){showError(error);}
+  }catch(error){showError(error);byId('status').dataset.failed='poll';}
 }
 async function action(url,data){
   if(busy)return;
