@@ -36,5 +36,37 @@ jobs:
       - name: Install locked Pi dependencies
         run: npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
 
-      - name: Offline tool and Pi protocol checks
+      - name: Install locked Durable dependencies
+        run: npm.cmd ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
+
+      - name: Offline tool, Pi and Durable checks
         run: python -B -X utf8 scripts/check.py
+
+  durable-portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: "22.19.0"
+            npm: npm
+          - os: ubuntu-latest
+            node: "24"
+            npm: npm
+          - os: windows-latest
+            node: "24"
+            npm: npm.cmd
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install locked Durable dependencies
+        run: ${{ matrix.npm }} ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
+      - name: Offline Durable platform boundaries
+        run: python -B -X utf8 -m unittest discover -s verification/durable-step0 -v

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>Durable 离线探针</title>
+<style>
+body{max-width:920px;margin:40px auto;font:16px/1.6 system-ui;background:#f4f6f8;color:#172635}
+main,section{background:white;border:1px solid #d6dee5;border-radius:10px;padding:24px;margin:16px 0}
+label{display:block;margin:12px 0}input,select,button{font:inherit;padding:8px;border:1px solid #8b9baa;border-radius:5px}
+input{width:70%}button{cursor:pointer;background:#174c74;color:white;margin:8px 6px 0 0}pre{white-space:pre-wrap;word-break:break-word}
+</style>
+<h1>Durable 离线探针</h1>
+<p>新建临时 SQLite · 合成模型与 Python 工具 · 不读取产品数据</p>
+<main>
+<label>输入 <input id="text" value="查询杭州到三亚的航班"></label>
+<label>请求 ID <input id="request" value="browser-flight"></label>
+<label>场景 <select id="scenario"><option value="safe">合成航班查询</option><option value="plan">写入 TripPlan</option><option value="">普通对话</option></select></label>
+<button id="submit">提交</button><button id="restart">强杀 Node 并恢复</button><button id="timer">创建三秒后台定时器</button>
+<p id="status" role="status">加载中</p>
+</main>
+<section><h2>已提交状态</h2><p id="counts"></p><p id="session"></p><pre id="plan"></pre><pre id="timer-state"></pre></section>
+<section><h2>对话记录</h2><pre id="transcript"></pre></section>
+<script>
+const byId=id=>document.getElementById(id);
+let busy=false;
+async function refresh(){
+  const response=await fetch('/state');
+  if(!response.ok)throw new Error(`状态读取失败 (${response.status})`);
+  const state=await response.json();
+  window.probeState=state;
+  byId('counts').textContent=`模型调用 ${state.counts[0]} · Python 工具调用 ${state.counts[1]}`;
+  byId('session').textContent=`会话 ${state.conversationId}`;
+  byId('plan').textContent=JSON.stringify(state.plan,null,2);
+  byId('timer-state').textContent=state.timer ? JSON.stringify(state.timer.state) : '无定时器';
+  byId('transcript').textContent=state.entries.filter(e=>['pi.user','pi.assistant','probe.plan-change'].includes(e.kind))
+    .map(e=>`${e.kind}\n${JSON.stringify(e.model ?? e.data)}`).join('\n\n');
+}
+function showError(error){
+  byId('status').textContent=String(error);
+  byId('status').dataset.failed='true';
+}
+async function refreshIdle(){
+  try{
+    await refresh();
+    if(byId('status').dataset.failed==='poll' || byId('status').textContent==='加载中'){
+      byId('status').textContent='就绪';
+      delete byId('status').dataset.failed;
+    }
+  }catch(error){showError(error);byId('status').dataset.failed='poll';}
+}
+async function action(url,data){
+  if(busy)return;
+  busy=true;byId('status').textContent='运行中';delete byId('status').dataset.failed;
+  try{
+    const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error);
+    await refresh();byId('status').textContent='已完成';
+  }catch(error){showError(error);}
+  finally{busy=false;}
+}
+byId('submit').onclick=()=>action('/prompt',{text:byId('text').value,requestId:byId('request').value,scenario:byId('scenario').value});
+byId('restart').onclick=()=>action('/restart',{});
+byId('timer').onclick=()=>action('/timer',{});
+refreshIdle();
+setInterval(()=>{if(!busy)refreshIdle();},1000);
+</script></html>
