@@ -1,6 +1,6 @@
 # Pi Durable 能力实验室
 
-本轮核心是独立的 Pi Durable MVP：在本机浏览器验证对话、工具调用、持久化笔记、取消、后台计时与服务重启后的继续执行。默认使用明确标注的离线合成模型，不查询差旅供应商，不连接 MCP。真实 DeepSeek 由 **pi-ai provider** 接入，再交给 Pi Durable，默认路径不依赖 pi-coding-agent。
+本轮核心是独立的 Pi Durable MVP：在本机浏览器验证对话、工具调用、持久化笔记、取消、后台计时与服务重启后的继续执行。默认使用明确标注的离线合成模型，不查询差旅供应商，不连接 MCP。真实 DeepSeek 由 **pi-ai provider** 接入，再交给 Pi Durable，Pi Durable 是唯一维护的 Agent 运行路径。
 
 这是框架能力 MVP，不代表完整差旅产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 继续定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 继续定义 B01–B12，本轮不改写业务目标。
 
@@ -38,7 +38,7 @@ python -B -X utf8 -m travel_agent --mode deepseek
 
 - [durable_mvp/server.mjs](durable_mvp/server.mjs)：HTTP、pi-ai、Pi Durable Harness、SQLite、原生工具和任务。
 - [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：展示并轮询保存的结果，同时提交消息、取消和后台计时操作。
-- [兼容启动入口](travel_agent/__main__.py)。
+- [启动入口](travel_agent/__main__.py)。
 - [本轮验收](verification/durable-mvp/README.md)：运行方式、断言和浏览器观察。
 - [底层 Durable 探针](verification/durable-step0/README.md)：原子性、存储失败和已提交状态等已有验证。
 
@@ -50,19 +50,19 @@ Pi Durable、pi-ai 和 chord 精确锁定 1.4.0；Durable 是实验性 API。只
 
 ## 默认离线检查
 
-完整回归保留旧工具、旧 Pi 运行时及探针，还需安装：
+安装 MVP 依赖后，完整检查还需安装 Durable 探针依赖：
 
 ```powershell
-npm.cmd ci --ignore-scripts --no-audit --no-fund
-npm.cmd ci --prefix verification/pi-step0 --ignore-scripts --no-audit --no-fund
 npm.cmd ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
 python scripts/check.py
 ```
 
 Windows 需允许探针强杀自己启动的 Node 子进程。检查不加载 `.env`，不产生模型或供应商费用。CI 在 PR 和 main 推送时运行，已增加 MVP 依赖安装；远端结果另行核实。
 
-## 保留的旧实现和数据
+## 保留的业务资产与数据
 
-旧 [FastAPI 入口](travel_agent/app.py)、[运行时](travel_agent/runtime.py)、[Coding Agent Worker](travel_agent/node/worker.mjs) 及 `travel_agent/web/` 保留作回归参考，已经退出默认启动路径。根目录旧 npm 包只用于旧回归，独立 MVP 不导入它。可复用的 [RealTools](travel_agent/real_tools.py)、供应商工具、事实结构和 Trace 保留。[旧业务与浏览器证据入口](verification/baseline/README.md) 仍然有效。
+[RealTools](travel_agent/real_tools.py)、交通/住宿/地点/路线供应商适配、[事实结构](travel_agent/facts.py)、[传输边界](travel_agent/supplier_wire.py) 和 [Trace](travel_agent/telemetry.py) 保留，有独立工具测试，尚未接入 Durable。Trace 不等于业务会话恢复。
 
-不要提交密钥、`.env`、个人数据或本机运行记录。保留历史数据库、Trace、`experiments/` 和其他本地数据，不因替换启动路径而迁移、覆盖或删除。
+[业务待接入验收索引](verification/baseline/README.md) 区分底层工具与未验证业务行为。[退役 ADR](docs/adr/001-retire-coding-agent.md) 记录历史位置。
+
+不提交密钥、.env 或本机记录；历史数据库、Trace、experiments 和个人数据不迁移、覆盖或删除。
