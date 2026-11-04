@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import net from 'node:net';
+import {DatabaseSync} from 'node:sqlite';
 import {syncBuiltinESMExports} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
@@ -34,16 +35,22 @@ if (offline) {
 const folder = path.resolve(options.data ?? `.durable-mvp/${options.mode}`);
 fs.mkdirSync(folder, {recursive: true});
 // OS-level SQLite locking alone does not exclude two independent harness schedulers.
-const lockPath = path.join(folder, 'host.lock');
+// A separate lock database holds an EXCLUSIVE transaction for the lifetime of this
+// process. The write, not BEGIN alone, is what takes the lock; the transaction stays
+// open, so the owner row is never committed. The OS releases the lock on exit or kill,
+// so there is no stale pid file to reclaim.
+const lockDb = new DatabaseSync(path.join(folder, 'host.lock.sqlite'));
+// Pin the connection: this binding alone can be collected, and finalization would close
+// the database and silently release the lock while the host is still running.
+globalThis.durableMvpHostLock = lockDb;
 try {
-  const owner = Number(fs.readFileSync(lockPath, 'utf8'));
-  if (!Number.isInteger(owner) || owner <= 0) throw new Error('Invalid host lock; inspect it manually');
-  try { process.kill(owner, 0); throw new Error('Store is already in use'); }
-  catch (error) { if (error.code !== 'ESRCH') throw error; }
-  fs.unlinkSync(lockPath);
-} catch (error) { if (error.code !== 'ENOENT') throw error; }
-fs.writeFileSync(lockPath, String(process.pid), {flag: 'wx'});
-process.on('exit', () => { try { fs.unlinkSync(lockPath); } catch {} });
+  lockDb.exec('PRAGMA locking_mode=EXCLUSIVE');
+  lockDb.exec('PRAGMA busy_timeout=0');
+  lockDb.exec('BEGIN EXCLUSIVE');
+  lockDb.exec('CREATE TABLE IF NOT EXISTS host (pid INTEGER NOT NULL, started_at TEXT NOT NULL)');
+  lockDb.exec('DELETE FROM host');
+  lockDb.prepare('INSERT INTO host (pid, started_at) VALUES (?, ?)').run(process.pid, new Date().toISOString());
+} catch (error) { throw new Error('Store is already in use: ' + error.message); }
 
 const Notebook = defineDoc({kind: 'mvp.notebook', version: 1, scope: 'conversation',
   history: 'rewindable', fork: 'asOf', initial: () => ({text: '', callId: ''}), checkpointWhen: () => false});
@@ -151,8 +158,8 @@ async function state() {
     note: (await harness.snapshot(Notebook, root.id, ctx))?.text ?? '', timers,
     busy: inspection.tasks.some(t => !t.record.background) || inspection.submissions.length > 0, counts, fatal};
 }
-function reply(res, status, value) {
-  res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'});
+function reply(res, status, value, headers = {}) {
+  res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers});
   res.end(JSON.stringify(value));
 }
 const server = http.createServer(async (req, res) => {
@@ -170,12 +177,14 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && req.url === '/state') return reply(res, 200, await state());
     if (req.method !== 'POST') return reply(res, 404, {error: 'Not found'});
-    if (req.headers['content-type'] !== 'application/json') return reply(res, 415, {error: 'Expected application/json'});
+    const mediaType = (req.headers['content-type'] ?? '').split(';', 1)[0].trim().toLowerCase();
+    // Rejections before the body is read must close the connection; the rest stays unread.
+    if (mediaType !== 'application/json') return reply(res, 415, {error: 'Expected application/json'}, {Connection: 'close'});
     const chunks = [];
     let bytes = 0;
     for await (const chunk of req) {
       bytes += chunk.length;
-      if (bytes > 16000) return reply(res, 413, {error: 'Request too large'});
+      if (bytes > 16000) return reply(res, 413, {error: 'Request too large'}, {Connection: 'close'});
       chunks.push(chunk);
     }
     const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));

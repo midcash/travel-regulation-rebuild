@@ -4,6 +4,7 @@ import http.client
 import os
 from pathlib import Path
 import queue
+import socket
 import subprocess
 import tempfile
 import threading
@@ -81,6 +82,19 @@ class MVPTests(unittest.TestCase):
         self.host.kill()
         self.host = Host(self.temp.name)
 
+    def raw_post(self, content_type, body):
+        host, port = self.host.url.removeprefix('http://').rsplit(':', 1)
+        head = (f'POST /prompt HTTP/1.1\r\nHost: {host}:{port}\r\n'
+                f'Content-Type: {content_type}\r\nContent-Length: {len(body)}\r\n'
+                'Connection: keep-alive\r\n\r\n').encode()
+        # read until EOF, so a host that leaves the socket open fails on the timeout
+        with socket.create_connection((host, int(port)), timeout=10) as raw:
+            raw.sendall(head + body)
+            chunks = []
+            while chunk := raw.recv(65536):
+                chunks.append(chunk)
+        return b''.join(chunks).decode()
+
     def test_note_restore_and_idempotent_retry(self):
         receipt = self.host.prompt('/note MVP笔记', 'note-1')
         before = self.host.wait()
@@ -149,6 +163,27 @@ class MVPTests(unittest.TestCase):
             self.host.prompt(' ', 'empty-1')
         self.assertEqual(error.exception.code, 400)
         self.assertEqual(self.host.call('/state')['messages'], before['messages'])
+
+    def test_json_media_type_with_parameters_is_accepted(self):
+        receipt = self.host.call('/prompt', {'text': '带参数类型', 'requestId': 'charset-1'},
+                                 {'Content-Type': 'application/json; charset=utf-8'})
+        self.assertIn('submissionId', receipt)
+        self.assertIn('带参数类型', self.host.wait()['messages'][-1]['text'])
+
+    def test_oversized_request_is_rejected_and_closes_connection(self):
+        body = json.dumps({'text': 'x' * 20000, 'requestId': 'oversized-1'}).encode()
+        response = self.raw_post('application/json', body)
+        self.assertTrue(response.startswith('HTTP/1.1 413'), response[:100])
+        self.assertIn('Connection: close', response)
+        self.assertIn('Request too large', response)
+        self.assertEqual(self.host.call('/state')['messages'], [])
+
+    def test_unread_rejection_closes_connection(self):
+        body = json.dumps({'text': 'x' * 20000, 'requestId': 'wrong-type-1'}).encode()
+        response = self.raw_post('text/plain', body)
+        self.assertTrue(response.startswith('HTTP/1.1 415'), response[:100])
+        self.assertIn('Connection: close', response)
+        self.assertEqual(self.host.call('/state')['messages'], [])
 
     def test_second_host_cannot_open_same_store(self):
         with self.assertRaisesRegex(AssertionError, 'already in use'):
