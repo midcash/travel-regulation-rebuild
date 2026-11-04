@@ -1,4 +1,4 @@
-"""Compatibility launcher for the Durable MVP; supplier modules remain reusable."""
+"""Launcher for the Durable MVP; supplier modules remain reusable."""
 import os
 from pathlib import Path
 import subprocess
