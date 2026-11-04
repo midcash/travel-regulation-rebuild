@@ -190,6 +190,15 @@ class MVPTests(unittest.TestCase):
             Host(self.temp.name)
         self.assertFalse(self.host.wait()['fatal'])
 
+    def test_corrupt_lock_database_keeps_its_own_error(self):
+        with tempfile.TemporaryDirectory(prefix='durable-mvp-corrupt-') as folder:
+            Path(folder, 'host.lock.sqlite').write_bytes(b'not a sqlite database' * 256)
+            with self.assertRaises(AssertionError) as error:
+                Host(folder)
+            message = str(error.exception)
+            self.assertNotIn('already in use', message)
+            self.assertIn('not a database', message)
+
     def test_chunked_utf8_is_not_corrupted(self):
         address = self.host.url.removeprefix('http://')
         connection = http.client.HTTPConnection(address, timeout=20)

@@ -50,7 +50,12 @@ try {
   lockDb.exec('CREATE TABLE IF NOT EXISTS host (pid INTEGER NOT NULL, started_at TEXT NOT NULL)');
   lockDb.exec('DELETE FROM host');
   lockDb.prepare('INSERT INTO host (pid, started_at) VALUES (?, ?)').run(process.pid, new Date().toISOString());
-} catch (error) { throw new Error('Store is already in use: ' + error.message); }
+} catch (error) {
+  // Only SQLITE_BUSY/SQLITE_LOCKED means another host holds this store; other failures
+  // (corruption, permissions, disk) must keep their own message.
+  if (error.errcode === 5 || error.errcode === 6) throw new Error('Store is already in use: ' + error.message);
+  throw error;
+}
 
 const Notebook = defineDoc({kind: 'mvp.notebook', version: 1, scope: 'conversation',
   history: 'rewindable', fork: 'asOf', initial: () => ({text: '', callId: ''}), checkpointWhen: () => false});
