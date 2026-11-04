@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
     commands = [
+        [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "verification/durable-mvp", "-v"],
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "tests", "-v"],
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "verification/pi-step0",
          "-p", "test_portable.py", "-v"],
