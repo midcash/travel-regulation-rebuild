@@ -1,0 +1,83 @@
+const $ = id => document.getElementById(id);
+let sending = false, healthy = false, current;
+let refreshId = 0;
+let connectionError = false;
+let pending;
+try { pending = JSON.parse(sessionStorage.getItem('durable-mvp-pending') || 'null'); } catch { pending = null; }
+async function api(url, body) {
+  const response = await fetch(url, {method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? {} : {'Content-Type': 'application/json'},
+    body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000)});
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+  return result;
+}
+function controls() {
+  $('send').disabled = !healthy || sending || current?.busy || !!pending;
+  $('cancel').disabled = !healthy || !current?.busy;
+  $('timer').disabled = !healthy || sending;
+  $('retry').hidden = !pending;
+  $('retry').disabled = !healthy || sending;
+}
+function draw(state) {
+  current = state;
+  $('mode').textContent = state.mode === 'offline' ? '离线演示 · 无模型费用' : `真实模型 · ${state.model.modelId}`;
+  $('description').textContent = state.mode === 'offline' ? '当前使用脚本化回显验证运行链路，不具备真实语言理解能力。会话、笔记和后台任务保存在本机。' : '由 pi-ai 接入 DeepSeek。提交消息和恢复未完成任务可能产生模型费用。';
+  $('status').textContent = state.busy ? '正在执行，可取消或刷新' : '就绪 · 已载入保存状态';
+  $('messages').replaceChildren();
+  for (const message of state.messages) {
+    if (!message.text && !message.calls.length) continue;
+    const item = document.createElement('article');
+    item.className = 'message ' + message.role;
+    const label = document.createElement('strong');
+    label.textContent = {user: '你', assistant: '助手', toolResult: '工具返回'}[message.role];
+    const text = document.createElement('p'); text.textContent = message.text;
+    item.append(label, text);
+    if (message.calls.length) { const calls = document.createElement('small'); calls.textContent = '调用工具：' + message.calls.join(', '); item.append(calls); }
+    $('messages').append(item);
+  }
+  $('note').textContent = state.note || '暂无笔记';
+  $('identity').textContent = `会话 ${state.conversationId} · ${state.model.provider}`;
+  $('counts').textContent = `本进程模型调用 ${state.counts.model} · 工具调用 ${state.counts.tool}`;
+  $('timers').replaceChildren(...state.timers.map(timer => {
+    const li = document.createElement('li');
+    li.textContent = timer.state?.status === 'terminal' ? '计时完成' : '等待到期 · ' + new Date(timer.until).toLocaleTimeString();
+    return li;
+  }));
+}
+async function refresh() {
+  const id = ++refreshId;
+  try {
+    const state = await api('/state'); if (id !== refreshId) return;
+    healthy = true; draw(state);
+    if (connectionError) { $('error').textContent = ''; connectionError = false; }
+  } catch (error) {
+    if (id !== refreshId) return;
+    healthy = false; connectionError = true;
+    $('status').textContent = '连接中断，等待服务恢复'; $('error').textContent = error.message;
+  }
+  controls();
+}
+async function submit() {
+  sending = true; controls(); $('error').textContent = '';
+  try {
+    await api('/prompt', pending);
+    pending = null; sessionStorage.removeItem('durable-mvp-pending'); $('text').value = '';
+  } catch (error) { $('error').textContent = error.message + '。请求未确认，可用相同 ID 重试。'; }
+  finally { sending = false; await refresh(); }
+}
+$('composer').addEventListener('submit', event => {
+  event.preventDefault();
+  if (sending || pending || !healthy || current?.busy || !$('text').value.trim()) return;
+  pending = {text: $('text').value, requestId: crypto.randomUUID()};
+  sessionStorage.setItem('durable-mvp-pending', JSON.stringify(pending));
+  void submit();
+});
+$('retry').onclick = () => { if (pending) void submit(); };
+for (const [id, endpoint] of [['cancel', '/abort'], ['timer', '/timer']]) $(id).onclick = async () => {
+  sending = true; controls(); $('error').textContent = '';
+  try { await api(endpoint, {}); } catch (error) { $('error').textContent = error.message; }
+  finally { sending = false; await refresh(); }
+};
+async function poll() { await refresh(); setTimeout(poll, 700); }
+void poll();

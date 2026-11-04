@@ -39,6 +39,9 @@ jobs:
       - name: Install locked Durable dependencies
         run: npm.cmd ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
 
+      - name: Install locked Durable MVP dependencies
+        run: npm.cmd ci --prefix durable_mvp --ignore-scripts --no-audit --no-fund
+
       - name: Offline tool, Pi and Durable checks
         run: python -B -X utf8 scripts/check.py
 
