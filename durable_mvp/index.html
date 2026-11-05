@@ -2,10 +2,11 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pi Durable · 能力实验室</title><link rel="stylesheet" href="/style.css"><script src="/fullcalendar.js" defer></script><script src="/app.js" defer></script></head>
 <body><header><span class="mark">π</span><div><h1>Pi Durable</h1><p>能力实验室 · MVP</p></div><span id="mode" class="badge">连接中</span></header>
 <main><section class="conversation"><div class="intro"><span class="eyebrow">从一次对话，走到重启之后</span><h2>让工作接着发生。</h2><p id="description">正在读取持久化会话。</p></div>
-<section class="calendar-panel"><h3>我的日程</h3><p id="calendar-zone" class="hint"></p><div id="calendar"></div><p id="calendar-detail" role="status"></p><div id="calendar-confirmations"></div></section>
+<section class="calendar-panel"><h3>我的日程</h3><p id="calendar-zone" class="hint"></p><div id="calendar"></div><p id="calendar-detail" role="status"></p></section>
 <div id="messages" aria-live="polite"></div>
+<section id="confirmation-panel" hidden aria-labelledby="confirmation-title" tabindex="-1"><h3 id="confirmation-title">待确认日程</h3><p>以下日程与已有安排重叠，尚未创建。确认后仍保留已有日程。</p><p id="confirmation-status" role="status"></p><div id="calendar-confirmations"></div></section>
 <form id="composer"><label for="text">消息</label><textarea id="text" maxlength="4000" required placeholder="输入消息，或试试 /note 记住这条笔记"></textarea><div class="actions"><span id="status" role="status">连接中</span><button id="cancel" type="button">取消本轮</button><button id="send" type="submit">发送消息 ↗</button></div></form>
-<p id="error" role="alert"></p><button id="retry" hidden>重试同一请求</button></section>
+<p id="error" role="alert"></p><button id="retry" hidden>重试同一请求</button><button id="confirmation-shortcut" type="button" hidden></button></section>
 <aside><section class="panel"><h3>持久化笔记</h3><p id="note">暂无笔记</p><p class="hint">由 save_note 工具写入，随会话保存。</p></section>
 <section class="panel"><h3>后台计时</h3><p class="hint">创建十秒任务，在服务重启后继续。取消对话不会取消后台任务。</p><button id="timer">创建十秒计时</button><ul id="timers"></ul></section>
 <section class="panel"><h3>试试能力边界</h3><dl><dt>/note 内容</dt><dd>调用工具保存笔记</dd><dt>/calendar JSON</dt><dd>新增日程，字段 title、start、end、timeZone；时间含时区偏移，例如 2026-11-06T15:00:00+08:00。</dd><dt>/events JSON</dt><dd>按 start、end 查询日程</dd><dt>/slow 内容</dt><dd>十秒工具，可取消或重启恢复</dd><dt>/fail</dt><dd>观察工具失败及后续对话</dd></dl><p class="hint">以上命令仅适用于离线演示。真实模型模式请用自然语言。首期只支持读取和新增单次定时日程。</p></section>

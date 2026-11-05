@@ -36,7 +36,13 @@ function controls() {
   $('timer').disabled = !healthy || sending;
   $('retry').hidden = !pending;
   $('retry').disabled = !healthy || sending;
+  for (const button of $('calendar-confirmations').querySelectorAll('button')) button.disabled = !healthy || sending || current?.busy || !!pending;
+  setText('confirmation-status', !healthy ? '连接中断，恢复后可确认。' : pending ? '有未确认提交的请求，请先重试同一请求。' : sending || current?.busy ? '正在处理会话，完成后可确认。' : '请核对时间，再选择是否确认创建。');
 }
+$('confirmation-shortcut').onclick = () => {
+  $('confirmation-panel').scrollIntoView({block: 'center'});
+  $('confirmation-panel').focus({preventScroll: true});
+};
 let renderedMessages = '';
 function setText(id, value) { if ($(id).textContent !== value) $(id).textContent = value; }
 function draw(state) {
@@ -68,18 +74,22 @@ function draw(state) {
   if (pendingSignature !== renderedPending) {
     renderedPending = pendingSignature;
     $('calendar-confirmations').replaceChildren();
-    for (const [id, item] of Object.entries(state.calendar.pending)) {
-      if (item.result) continue;
-      const card = document.createElement('p');
-      const detail = document.createElement('span');
-      detail.textContent = `日程重叠：${item.event.title} · ${item.event.start} — ${item.event.end}。是否仍要创建？ `;
+    const unresolved = Object.entries(state.calendar.pending).filter(([, item]) => !item.result);
+    $('confirmation-panel').hidden = unresolved.length === 0;
+    $('confirmation-shortcut').hidden = unresolved.length === 0;
+    setText('confirmation-shortcut', `查看待确认日程（${unresolved.length}）`);
+    for (const [id, item] of unresolved) {
+      const card = document.createElement('article');
+      const title = document.createElement('h4'); title.textContent = item.event.title;
+      const detail = document.createElement('p');
+      detail.textContent = `${item.event.start} — ${item.event.end}（${item.event.timeZone}）`;
       const button = document.createElement('button'); button.textContent = '确认创建';
       button.onclick = () => {
         if (sending || pending || !healthy || current?.busy) return;
         pending = {text: '确认重叠 ' + id, requestId: crypto.randomUUID()};
         sessionStorage.setItem('durable-mvp-pending', JSON.stringify(pending)); void submit();
       };
-      card.append(detail, button); $('calendar-confirmations').append(card);
+      card.append(title, detail, button); $('calendar-confirmations').append(card);
     }
   }
   setText('identity', `会话 ${state.conversationId} · ${state.model.provider}`);
@@ -107,7 +117,8 @@ async function submit() {
   sending = true; controls(); $('error').textContent = '';
   try {
     await api('/prompt', pending);
-    pending = null; sessionStorage.removeItem('durable-mvp-pending'); $('text').value = '';
+    if ($('text').value === pending.text) $('text').value = '';
+    pending = null; sessionStorage.removeItem('durable-mvp-pending');
   } catch (error) { $('error').textContent = error.message + '。请求未确认，可用相同 ID 重试。'; }
   finally { sending = false; await refresh(); }
 }
