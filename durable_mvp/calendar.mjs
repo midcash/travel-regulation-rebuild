@@ -52,7 +52,9 @@ export function calendarTools(event) {
           if (conflicts.some(e => !(pending.conflicts ?? []).some(old => old.id === e.id && old.start === e.start && old.end === e.end))) {
             pending.authorized = false;
             pending.conflicts = conflicts;
-            return output({status: 'needs_confirmation', confirmationId: input.confirmationId, event: candidate, conflicts, message: '出现新的冲突，请用户重新确认'});
+            const result = {status: 'needs_confirmation', confirmationId: input.confirmationId, event: candidate, conflicts, message: '出现新的冲突，请用户重新确认'};
+            doc.operations[api.callId] = result;
+            return output(result);
           }
         } else {
           input = {...input, timeZone: input.timeZone || 'Etc/GMT+8'};

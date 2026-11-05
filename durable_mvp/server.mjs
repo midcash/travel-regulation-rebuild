@@ -100,7 +100,7 @@ const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, sl
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Default calendar timezone is fixed UTC-8 (Etc/GMT+8, offset -08:00), including relative dates and unqualified user times. Do not ask timezone unless ambiguous or user specifies another zone. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support only listing and creating timed events.`)]});
+  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Default calendar timezone is fixed UTC-8 (Etc/GMT+8, offset -08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support only listing and creating timed events.`)]});
 const models = createModels();
 let model;
 if (offline) {
