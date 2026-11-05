@@ -1,4 +1,26 @@
 const $ = id => document.getElementById(id);
+const displayZone = 'Etc/GMT+8'; // IANA's Etc/GMT sign is reversed: this is fixed UTC-8.
+const formatTime = value => new Intl.DateTimeFormat('zh-CN', {timeZone: displayZone, dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23'}).format(new Date(value));
+let calendarFailed = false;
+const calendar = new FullCalendar.Calendar($('calendar'), {
+  initialView: 'dayGridMonth', locale: 'zh-cn', timeZone: displayZone, height: 'auto',
+  buttonText: {today: '今天', month: '月', week: '周', day: '日'},
+  headerToolbar: {left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay'},
+  events: '/calendar',
+  eventSourceFailure: () => { calendarFailed = true; $('calendar-error').textContent = '日历加载失败，正在重试。'; },
+  eventSourceSuccess: () => { calendarFailed = false; $('calendar-error').textContent = ''; },
+  eventClick: ({event}) => { $('calendar-detail').textContent = `${event.title} · ${formatTime(event.start)} — ${formatTime(event.end)}（UTC−8）`; },
+});
+calendar.render();
+// FullCalendar's inner tables cache pixel widths; update after the container resizes.
+let calendarWidth = 0;
+new ResizeObserver(([entry]) => {
+  if (entry.contentRect.width === calendarWidth) return;
+  calendarWidth = entry.contentRect.width;
+  requestAnimationFrame(() => calendar.updateSize());
+}).observe($('calendar'));
+$('calendar-zone').textContent = '显示时区：UTC−8（固定 −08:00）';
+let renderedCalendar = '', renderedPending = '';
 let sending = false, healthy = false, current;
 let refreshId = 0;
 let connectionError = false;
@@ -18,7 +40,13 @@ function controls() {
   $('timer').disabled = !healthy || sending;
   $('retry').hidden = !pending;
   $('retry').disabled = !healthy || sending;
+  for (const button of $('calendar-confirmations').querySelectorAll('button')) button.disabled = !healthy || sending || current?.busy || !!pending;
+  setText('confirmation-status', !healthy ? '连接中断，恢复后可确认。' : pending ? '有未确认提交的请求，请先重试同一请求。' : sending || current?.busy ? '正在处理会话，完成后可确认。' : '请核对时间，再选择是否确认创建。');
 }
+$('confirmation-shortcut').onclick = () => {
+  $('confirmation-panel').scrollIntoView({block: 'center'});
+  $('confirmation-panel').focus({preventScroll: true});
+};
 let renderedMessages = '';
 function setText(id, value) { if ($(id).textContent !== value) $(id).textContent = value; }
 function draw(state) {
@@ -44,6 +72,32 @@ function draw(state) {
     }
   }
   setText('note', state.note || '暂无笔记');
+  const calendarSignature = JSON.stringify(state.calendar.events);
+  if (calendarSignature !== renderedCalendar) { renderedCalendar = calendarSignature; calendar.refetchEvents(); }
+  const pendingSignature = JSON.stringify(state.calendar.pending);
+  if (pendingSignature !== renderedPending) {
+    renderedPending = pendingSignature;
+    $('calendar-confirmations').replaceChildren();
+    const unresolved = Object.entries(state.calendar.pending).filter(([, item]) => !item.result);
+    $('confirmation-panel').hidden = unresolved.length === 0;
+    $('confirmation-shortcut').hidden = unresolved.length === 0;
+    setText('confirmation-shortcut', `查看待确认日程（${unresolved.length}）`);
+    for (const [id, item] of unresolved) {
+      const card = document.createElement('article');
+      const title = document.createElement('h4'); title.textContent = item.event.title;
+      const detail = document.createElement('p');
+      detail.textContent = `${formatTime(item.event.start)} — ${formatTime(item.event.end)}（UTC−8）`;
+      const conflicts = document.createElement('p');
+      conflicts.textContent = '重叠安排：' + (item.conflicts ?? []).map(e => `${e.title}（${formatTime(e.start)} — ${formatTime(e.end)}）`).join('；');
+      const button = document.createElement('button'); button.textContent = '确认创建';
+      button.onclick = () => {
+        if (sending || pending || !healthy || current?.busy) return;
+        pending = {text: '确认重叠 ' + id, requestId: crypto.randomUUID()};
+        sessionStorage.setItem('durable-mvp-pending', JSON.stringify(pending)); void submit();
+      };
+      card.append(title, detail, conflicts, button); $('calendar-confirmations').append(card);
+    }
+  }
   setText('identity', `会话 ${state.conversationId} · ${state.model.provider}`);
   setText('counts', `本进程模型调用 ${state.counts.model} · 工具调用 ${state.counts.tool}`);
   $('timers').replaceChildren(...state.timers.map(timer => {
@@ -57,7 +111,8 @@ async function refresh() {
   try {
     const state = await api('/state'); if (id !== refreshId) return;
     healthy = true; draw(state);
-    if (connectionError) { $('error').textContent = ''; connectionError = false; }
+    if (calendarFailed) { calendarFailed = false; calendar.refetchEvents(); }
+    if (connectionError) { $('error').textContent = ''; connectionError = false; calendar.refetchEvents(); }
   } catch (error) {
     if (id !== refreshId) return;
     healthy = false; connectionError = true;
@@ -69,7 +124,8 @@ async function submit() {
   sending = true; controls(); $('error').textContent = '';
   try {
     await api('/prompt', pending);
-    pending = null; sessionStorage.removeItem('durable-mvp-pending'); $('text').value = '';
+    if ($('text').value === pending.text) $('text').value = '';
+    pending = null; sessionStorage.removeItem('durable-mvp-pending');
   } catch (error) { $('error').textContent = error.message + '。请求未确认，可用相同 ID 重试。'; }
   finally { sending = false; await refresh(); }
 }
