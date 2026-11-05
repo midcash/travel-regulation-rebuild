@@ -37,6 +37,7 @@ function setSchedule(open) {
 for (const button of scheduleButtons) button.onclick = () => setSchedule(!scheduleOpen);
 $('schedule-close').onclick = () => setSchedule(false);
 setSchedule(scheduleOpen);
+let pendingAutoScroll = false;
 let narrowLayout = window.matchMedia('(max-width: 860px)').matches;
 addEventListener('resize', () => {
   const nowNarrow = window.matchMedia('(max-width: 860px)').matches;
@@ -58,6 +59,11 @@ function showView() {
     if (active) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current');
   }
   document.title = (notes ? '笔记与数据' : '对话') + ' · Pi Durable';
+  if (!notes && pendingAutoScroll) requestAnimationFrame(() => {
+    const scroller = $('chat-scroll');
+    scroller.scrollTop = scroller.scrollHeight;
+    pendingAutoScroll = false;
+  });
 }
 addEventListener('hashchange', showView);
 showView();
@@ -110,17 +116,20 @@ function draw(state) {
       if (!message.text && !message.calls.length) continue;
       const item = document.createElement('article');
       item.className = 'message ' + message.role;
-      if (message.role === 'toolResult') {
-        const label = document.createElement('strong');
-        label.textContent = '工具返回';
-        item.append(label);
-      }
+      const label = document.createElement('strong');
+      label.textContent = {user: '你', assistant: '助手', toolResult: '工具返回'}[message.role];
+      if (message.role !== 'toolResult') label.className = 'sr-only';
+      item.append(label);
       const text = document.createElement('p'); text.textContent = message.text;
       item.append(text);
       if (message.calls.length) { const calls = document.createElement('small'); calls.textContent = '调用工具：' + message.calls.join(', '); item.append(calls); }
       $('messages').append(item);
     }
-    if (follow) scroller.scrollTop = scroller.scrollHeight;
+    if (follow) {
+      // A hidden chat view has no layout, so defer the scroll until it becomes visible.
+      if ($('chat-view').hidden) pendingAutoScroll = true;
+      else { scroller.scrollTop = scroller.scrollHeight; pendingAutoScroll = false; }
+    }
   }
   setText('note', state.note || '暂无笔记');
   const calendarSignature = JSON.stringify(state.calendar.events);

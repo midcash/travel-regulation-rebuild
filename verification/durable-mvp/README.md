@@ -72,6 +72,12 @@ Codex + Ego Lite 在本轮新建临时离线库验证：浏览器设为 Asia/Sha
 
 本轮 `python scripts/check.py` 通过：16 项 MVP、39 项工具/启动器、22 项底层 Durable 检查，退出码 0。真实 DeepSeek、真实供应商、用户验收与远端 CI 未执行，不计为通过；本机截图与临时库不提交。
 
+## Cubic 复核（2026-11-05）
+
+对 PR #58 的 6 条 inline 复核逐条用 Ego Lite 复现并在各自线程回复：采纳 5 条——中等宽度笔记网格改 `auto-fit` 自动单列、隐藏对话时延迟自动滚动、`prefers-reduced-motion` 关闭过渡、补三个 ID 按钮的 hover 反馈、给用户/助手消息加视觉隐藏的说话人标签；拒绝 1 条——窄屏 `textarea` 改 16px 以避免 iOS Safari 聚焦缩放：本轮验收环境为 Chromium，`visualViewport.scale` 为 1 且不实现该缩放，项目未声明 iOS 支持，且用户明确要求收小字号。
+
+复验断言：从 `#/notes` 直接打开再回对话时 `atBottom` 为 true（修复前 false），手动滚到 500px 后往返仍为 500px 不覆盖用户位置；960px 视口笔记面板内容宽由 187px 变 448px；reduced-motion 下抽屉过渡为 0s、正常动作仍为 0.22s；三个按钮 hover 背景均变化；`sr-only` 标签为 1×1 且用户消息高度不变。发送新消息后输入框清空、消息与计数增长、笔记和两条日程不变。完整 `python scripts/check.py` 仍为 16/39/22 项通过。
+
 ## PR #54 历史浏览器观察
 
 以下对应 `d4b4b3b`，不自动作为后续提交验收证明。
