@@ -1,11 +1,15 @@
 const $ = id => document.getElementById(id);
+const displayZone = 'Etc/GMT+8'; // IANA's Etc/GMT sign is reversed: this is fixed UTC-8.
+const formatTime = value => new Intl.DateTimeFormat('zh-CN', {timeZone: displayZone, dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23'}).format(new Date(value));
+let calendarFailed = false;
 const calendar = new FullCalendar.Calendar($('calendar'), {
-  initialView: 'dayGridMonth', locale: 'zh-cn', timeZone: 'local', height: 'auto',
+  initialView: 'dayGridMonth', locale: 'zh-cn', timeZone: displayZone, height: 'auto',
   buttonText: {today: '今天', month: '月', week: '周', day: '日'},
   headerToolbar: {left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay'},
   events: '/calendar',
-  eventSourceFailure: () => { $('calendar-detail').textContent = '日历加载失败，请等待连接恢复。'; },
-  eventClick: ({event}) => { $('calendar-detail').textContent = `${event.title} · ${event.start.toLocaleString()} — ${event.end.toLocaleString()}`; },
+  eventSourceFailure: () => { calendarFailed = true; $('calendar-error').textContent = '日历加载失败，正在重试。'; },
+  eventSourceSuccess: () => { calendarFailed = false; $('calendar-error').textContent = ''; },
+  eventClick: ({event}) => { $('calendar-detail').textContent = `${event.title} · ${formatTime(event.start)} — ${formatTime(event.end)}（UTC−8）`; },
 });
 calendar.render();
 // FullCalendar's inner tables cache pixel widths; update after the container resizes.
@@ -15,7 +19,7 @@ new ResizeObserver(([entry]) => {
   calendarWidth = entry.contentRect.width;
   requestAnimationFrame(() => calendar.updateSize());
 }).observe($('calendar'));
-$('calendar-zone').textContent = '显示时区：' + Intl.DateTimeFormat().resolvedOptions().timeZone;
+$('calendar-zone').textContent = '显示时区：UTC−8（固定 −08:00）';
 let renderedCalendar = '', renderedPending = '';
 let sending = false, healthy = false, current;
 let refreshId = 0;
@@ -82,14 +86,16 @@ function draw(state) {
       const card = document.createElement('article');
       const title = document.createElement('h4'); title.textContent = item.event.title;
       const detail = document.createElement('p');
-      detail.textContent = `${item.event.start} — ${item.event.end}（${item.event.timeZone}）`;
+      detail.textContent = `${formatTime(item.event.start)} — ${formatTime(item.event.end)}（UTC−8）`;
+      const conflicts = document.createElement('p');
+      conflicts.textContent = '重叠安排：' + (item.conflicts ?? []).map(e => `${e.title}（${formatTime(e.start)} — ${formatTime(e.end)}）`).join('；');
       const button = document.createElement('button'); button.textContent = '确认创建';
       button.onclick = () => {
         if (sending || pending || !healthy || current?.busy) return;
         pending = {text: '确认重叠 ' + id, requestId: crypto.randomUUID()};
         sessionStorage.setItem('durable-mvp-pending', JSON.stringify(pending)); void submit();
       };
-      card.append(title, detail, button); $('calendar-confirmations').append(card);
+      card.append(title, detail, conflicts, button); $('calendar-confirmations').append(card);
     }
   }
   setText('identity', `会话 ${state.conversationId} · ${state.model.provider}`);
@@ -105,6 +111,7 @@ async function refresh() {
   try {
     const state = await api('/state'); if (id !== refreshId) return;
     healthy = true; draw(state);
+    if (calendarFailed) { calendarFailed = false; calendar.refetchEvents(); }
     if (connectionError) { $('error').textContent = ''; connectionError = false; calendar.refetchEvents(); }
   } catch (error) {
     if (id !== refreshId) return;

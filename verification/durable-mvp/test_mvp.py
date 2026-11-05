@@ -125,7 +125,7 @@ class MVPTests(unittest.TestCase):
         before = self.calendar_prompt(event, 'calendar-1')
         self.assertEqual(len(before['calendar']['events']), 1)
         saved = before['calendar']['events'][0]
-        self.assertEqual(saved['title'], event['title'])
+        self.assertEqual({key: saved[key] for key in event}, event)
         query = dict(start='2026-11-06T00:00:00+08:00', end='2026-11-07T00:00:00+08:00')
         self.host.prompt('/events ' + json.dumps(query), 'query-1')
         state = self.host.wait()
@@ -151,13 +151,14 @@ class MVPTests(unittest.TestCase):
                                     {'timeZone': 'Europe/Paris'}, {'start': '2026-11-06T15:00:00'}]):
             state = self.calendar_prompt({**event, **change}, f'invalid-{i}')
             self.assertEqual(state['calendar']['events'], [])
-            self.assertTrue(any(m['error'] for m in state['messages'] if m['role'] == 'toolResult'))
+            self.assertTrue([m for m in state['messages'] if m['role'] == 'toolResult'][-1]['error'])
         self.calendar_prompt(event, 'original-1')
         state = self.calendar_prompt({**event, 'title': '重叠会议'}, 'overlap-1')
         self.assertEqual(len(state['calendar']['events']), 1)
         token = next(iter(state['calendar']['pending']))
         unauthorized = self.calendar_prompt({'confirmationId': token}, 'fake-confirm-1')
         self.assertEqual(len(unauthorized['calendar']['events']), 1)
+        self.assertFalse(unauthorized['calendar']['pending'][token]['authorized'])
         self.restart()
         self.host.wait()
         self.host.prompt('确认重叠 ' + token, 'confirm-1')
@@ -167,6 +168,36 @@ class MVPTests(unittest.TestCase):
         self.assertEqual(len(self.host.wait()['calendar']['events']), 2)
         adjacent = {**event, 'title': '接续会议', 'start': event['end'], 'end': '2026-11-06T17:00:00+08:00'}
         self.assertEqual(len(self.calendar_prompt(adjacent, 'adjacent-1')['calendar']['events']), 3)
+
+    def test_calendar_confirmation_rechecks_new_conflicts(self):
+        event = dict(title='原安排', start='2026-11-06T14:00:00-08:00', end='2026-11-06T15:00:00-08:00')
+        self.calendar_prompt(event, 'first')
+        state = self.calendar_prompt({**event, 'title': '待确认', 'start': '2026-11-06T13:00:00-08:00', 'end': '2026-11-06T17:00:00-08:00'}, 'pending')
+        token = next(iter(state['calendar']['pending']))
+        state = self.calendar_prompt({**event, 'title': '新冲突', 'start': '2026-11-06T16:00:00-08:00', 'end': '2026-11-06T17:00:00-08:00'}, 'new')
+        self.assertEqual(state['calendar']['events'][0]['timeZone'], 'Etc/GMT+8')
+        self.host.prompt('确认重叠 ' + token, 'approve-first')
+        state = self.host.wait()
+        self.assertEqual(len(state['calendar']['events']), 2)
+        self.assertFalse(state['calendar']['pending'][token]['authorized'])
+        self.assertEqual(len(state['calendar']['pending'][token]['conflicts']), 2)
+        self.host.prompt('确认重叠 ' + token, 'approve-again')
+        state = self.host.wait()
+        self.assertEqual(len(state['calendar']['events']), 3)
+
+    def test_calendar_capacity_does_not_create_pending(self):
+        self.host.kill()
+        seed = subprocess.run(['node', '--input-type=module', '-', self.temp.name],
+                              input=(ROOT / 'verification/durable-mvp/seed_capacity.mjs').read_text(encoding='utf-8'),
+                              cwd=ROOT / 'durable_mvp', capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(seed.returncode, 0, seed.stderr)
+        self.host = Host(self.temp.name)
+        state = self.calendar_prompt(dict(title='已满', start='2026-11-06T14:00:00-08:00', end='2026-11-06T15:00:00-08:00'), 'full')
+        self.assertEqual(len(state['calendar']['events']), 200)
+        self.assertEqual(state['calendar']['pending'], {})
+        latest = [m for m in state['messages'] if m['role'] == 'toolResult'][-1]
+        self.assertTrue(latest['error'])
+        self.assertIn('200', latest['text'])
 
     def test_interrupted_safe_tool_resumes(self):
         self.host.prompt('/slow 恢复完成', 'slow-1')

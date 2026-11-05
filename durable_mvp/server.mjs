@@ -100,7 +100,7 @@ const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, sl
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Browser display timezone varies; ask the user for event timezone if unknown. Ask for missing event title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support only listing and creating timed events.`)]});
+  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Default calendar timezone is fixed UTC-8 (Etc/GMT+8, offset -08:00), including relative dates and unqualified user times. Do not ask timezone unless ambiguous or user specifies another zone. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support only listing and creating timed events.`)]});
 const models = createModels();
 let model;
 if (offline) {
@@ -190,6 +190,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/fullcalendar.js') {
       res.writeHead(200, {'Content-Type': 'text/javascript'});
       return res.end(fs.readFileSync(path.join(here, 'node_modules/fullcalendar/index.global.min.js')));
+    }
+    const calendarAssets = {'/calendar-zh-cn.js': '@fullcalendar/core/locales/zh-cn.global.min.js',
+      '/luxon.js': 'luxon/build/global/luxon.min.js', '/calendar-zone.js': '@fullcalendar/luxon3/index.global.min.js'};
+    if (req.method === 'GET' && Object.hasOwn(calendarAssets, req.url)) {
+      res.writeHead(200, {'Content-Type': 'text/javascript'});
+      return res.end(fs.readFileSync(path.join(here, 'node_modules', calendarAssets[req.url])));
     }
     if (req.method === 'GET' && req.url.startsWith('/calendar?')) {
       const query = new URL(req.url, origin).searchParams;

@@ -31,7 +31,7 @@ export function calendarTools(event) {
       event('tool');
       return api.commit(async tx => output({events: inRange((await tx.doc(Calendar, api.conversationId)).events, start, end)}), context);
     }}), defineTool({name: 'create_calendar_event',
-    description: 'Create ONE event with title, start, end and timeZone (IANA). Ask user for missing information. On needs_confirmation ask user to use the page confirmation button. Never claim success unless status is created. confirmationId retries a pending event; only server-recorded user confirmation authorizes overlap. No editing/deleting/recurrence/reminders.',
+    description: 'Create ONE event with title, start, end (explicit offsets) and optional IANA timeZone (defaults to Etc/GMT+8, fixed UTC-8). Ask user for missing title/date/start/end. On needs_confirmation ask user to use the page confirmation button. Never claim success unless status is created. confirmationId retries a pending event; only server-recorded user confirmation authorizes overlap. No editing/deleting/recurrence/reminders.',
     parameters: Type.Object({title: Type.Optional(Type.String({maxLength: 200})), start: Type.Optional(Type.String()),
       end: Type.Optional(Type.String()), timeZone: Type.Optional(Type.String()), confirmationId: Type.Optional(Type.String())}), replay: 'safe',
     execute: async (input, api, context) => {
@@ -39,6 +39,8 @@ export function calendarTools(event) {
       return api.commit(async tx => {
         const doc = await tx.doc(Calendar, api.conversationId);
         if (Object.hasOwn(doc.operations, api.callId)) return output(doc.operations[api.callId]);
+        if (input.confirmationId && doc.pending[input.confirmationId]?.result) return output(doc.pending[input.confirmationId].result);
+        if (doc.events.length >= 200) throw new Error('MVP 日程上限为 200 条');
         let candidate, pending;
         if (input.confirmationId) {
           pending = doc.pending[input.confirmationId];
@@ -46,8 +48,15 @@ export function calendarTools(event) {
           if (pending.result) return output(pending.result);
           if (!pending.authorized) return output({status: 'needs_confirmation', confirmationId: input.confirmationId, event: pending.event});
           candidate = pending.event;
+          const conflicts = inRange(doc.events, candidate.start, candidate.end);
+          if (conflicts.some(e => !(pending.conflicts ?? []).some(old => old.id === e.id && old.start === e.start && old.end === e.end))) {
+            pending.authorized = false;
+            pending.conflicts = conflicts;
+            return output({status: 'needs_confirmation', confirmationId: input.confirmationId, event: candidate, conflicts, message: '出现新的冲突，请用户重新确认'});
+          }
         } else {
-          const missing = ['title', 'start', 'end', 'timeZone'].filter(key => !input[key]?.trim());
+          input = {...input, timeZone: input.timeZone || 'Etc/GMT+8'};
+          const missing = ['title', 'start', 'end'].filter(key => !input[key]?.trim());
           if (missing.length) return output({status: 'needs_information', missing, message: '请向用户追问缺少的信息'});
           range(input.start, input.end);
           const formatter = new Intl.DateTimeFormat('sv-SE', {timeZone: input.timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'});
@@ -58,7 +67,7 @@ export function calendarTools(event) {
           const conflicts = inRange(doc.events, candidate.start, candidate.end);
           if (conflicts.length) {
             const confirmationId = randomUUID();
-            doc.pending[confirmationId] = {event: candidate, authorized: false};
+            doc.pending[confirmationId] = {event: candidate, conflicts, authorized: false};
             const result = {status: 'needs_confirmation', confirmationId, event: candidate, conflicts};
             doc.operations[api.callId] = result;
             return output(result);
