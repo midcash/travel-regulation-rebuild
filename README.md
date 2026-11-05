@@ -2,9 +2,9 @@
 
 本轮核心是独立的 Pi Durable MVP：在本机浏览器验证对话、工具调用、持久化笔记、取消、后台计时与服务重启后的继续执行。默认使用明确标注的离线合成模型，不查询差旅供应商，不连接 MCP。真实 DeepSeek 由 **pi-ai provider** 接入，再交给 Pi Durable，Pi Durable 是唯一维护的 Agent 运行路径。
 
-产品方向为个人日程 Agent 助手，差旅作为保留的子能力。日程能力尚未定义和实现。
+产品方向为个人日程 Agent 助手，差旅作为保留的子能力。本轮新增会话读取、新增日程及 FullCalendar 视图；确认目标见 `docs/product-behavior.md` 的 S01–S04。
 
-这是框架能力 MVP，不代表完整产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 定义已确认的业务目标（目前为差旅子能力 B01–B12），本轮不改写业务目标。
+这是能力 MVP，不代表完整产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 定义日程与差旅子能力的已确认目标。
 
 ## 安装与启动
 
@@ -24,6 +24,21 @@ python -B -X utf8 -m travel_agent
 python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 ```
 
+### 日历视图与工具
+
+页面使用本地安装的 FullCalendar 6.1.20（MIT），支持月、周、日视图；显示时区为浏览器时区。点击事件查看完整起止时间。两个原生工具为 `list_calendar_events` 和 `create_calendar_event`，与页面 HTTP 查询共用 Durable 文档及 `session.sqlite`，不另建数据库、不迁移旧数据。
+
+离线模式示例（仅合成模型指令，不代表自然语言理解）：
+
+```text
+/calendar {"title":"项目评审","start":"2026-11-06T15:00:00+08:00","end":"2026-11-06T16:00:00+08:00","timeZone":"Asia/Shanghai"}
+/events {"start":"2026-11-06T00:00:00+08:00","end":"2026-11-07T00:00:00+08:00"}
+```
+
+真实模式使用自然语言。缺少标题、日期、开始/结束时间或时区时先追问，不默认补时长。工具校验时间与 IANA 时区一致，按半开区间判断重叠；重叠时保存候选并展示确认按钮，用户点击后通过会话提交 `确认重叠 <标识>`，服务端记录授权，工具才创建。暂不支持修改、删除、全天、重复日程或提醒。
+
+相同 HTTP 请求 ID 沿用现有提交去重；日程、创建工具 call ID 对应的结果和变更记录在同一 Durable 事务提交，恢复重放返回原结果。确认候选保存原日程 ID 和最终结果，重复确认也不会新增事件。新请求表达相同内容不会自动视为重复，而会走重叠确认。上限为 200 条已创建日程。
+
 ### 真实模型（主动选择，可能产生费用）
 
 在本地 `.env` 或环境变量配置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL` 和可选的 `DEEPSEEK_BASE_URL`：
@@ -39,6 +54,7 @@ python -B -X utf8 -m travel_agent --mode deepseek
 ## 源码与能力边界
 
 - [durable_mvp/server.mjs](durable_mvp/server.mjs)：HTTP、pi-ai、Pi Durable Harness、SQLite、原生工具和任务。
+- [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询与创建工具、重叠候选和事务去重。
 - [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：展示并轮询保存的结果，同时提交消息、取消和后台计时操作。
 - [启动入口](travel_agent/__main__.py)。
 - [本轮验收](verification/durable-mvp/README.md)：运行方式、断言和浏览器观察。

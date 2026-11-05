@@ -1,4 +1,22 @@
 const $ = id => document.getElementById(id);
+const calendar = new FullCalendar.Calendar($('calendar'), {
+  initialView: 'dayGridMonth', locale: 'zh-cn', timeZone: 'local', height: 'auto',
+  buttonText: {today: '今天', month: '月', week: '周', day: '日'},
+  headerToolbar: {left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay'},
+  events: '/calendar',
+  eventSourceFailure: () => { $('calendar-detail').textContent = '日历加载失败，请等待连接恢复。'; },
+  eventClick: ({event}) => { $('calendar-detail').textContent = `${event.title} · ${event.start.toLocaleString()} — ${event.end.toLocaleString()}`; },
+});
+calendar.render();
+// FullCalendar's inner tables cache pixel widths; update after the container resizes.
+let calendarWidth = 0;
+new ResizeObserver(([entry]) => {
+  if (entry.contentRect.width === calendarWidth) return;
+  calendarWidth = entry.contentRect.width;
+  requestAnimationFrame(() => calendar.updateSize());
+}).observe($('calendar'));
+$('calendar-zone').textContent = '显示时区：' + Intl.DateTimeFormat().resolvedOptions().timeZone;
+let renderedCalendar = '', renderedPending = '';
 let sending = false, healthy = false, current;
 let refreshId = 0;
 let connectionError = false;
@@ -44,6 +62,26 @@ function draw(state) {
     }
   }
   setText('note', state.note || '暂无笔记');
+  const calendarSignature = JSON.stringify(state.calendar.events);
+  if (calendarSignature !== renderedCalendar) { renderedCalendar = calendarSignature; calendar.refetchEvents(); }
+  const pendingSignature = JSON.stringify(state.calendar.pending);
+  if (pendingSignature !== renderedPending) {
+    renderedPending = pendingSignature;
+    $('calendar-confirmations').replaceChildren();
+    for (const [id, item] of Object.entries(state.calendar.pending)) {
+      if (item.result) continue;
+      const card = document.createElement('p');
+      const detail = document.createElement('span');
+      detail.textContent = `日程重叠：${item.event.title} · ${item.event.start} — ${item.event.end}。是否仍要创建？ `;
+      const button = document.createElement('button'); button.textContent = '确认创建';
+      button.onclick = () => {
+        if (sending || pending || !healthy || current?.busy) return;
+        pending = {text: '确认重叠 ' + id, requestId: crypto.randomUUID()};
+        sessionStorage.setItem('durable-mvp-pending', JSON.stringify(pending)); void submit();
+      };
+      card.append(detail, button); $('calendar-confirmations').append(card);
+    }
+  }
   setText('identity', `会话 ${state.conversationId} · ${state.model.provider}`);
   setText('counts', `本进程模型调用 ${state.counts.model} · 工具调用 ${state.counts.tool}`);
   $('timers').replaceChildren(...state.timers.map(timer => {
@@ -57,7 +95,7 @@ async function refresh() {
   try {
     const state = await api('/state'); if (id !== refreshId) return;
     healthy = true; draw(state);
-    if (connectionError) { $('error').textContent = ''; connectionError = false; }
+    if (connectionError) { $('error').textContent = ''; connectionError = false; calendar.refetchEvents(); }
   } catch (error) {
     if (id !== refreshId) return;
     healthy = false; connectionError = true;

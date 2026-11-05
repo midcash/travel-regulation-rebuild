@@ -16,6 +16,7 @@ import {fauxProvider, fauxAssistantMessage, fauxToolCall} from '@earendil-works/
 import {Harness, createRegistry, defineDoc, defineEntry, defineExtension, defineTool, defineTask, section}
   from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
+import {Calendar, calendarTools, inRange} from './calendar.mjs';
 
 const {values: options} = parseArgs({options: {
   mode: {type: 'string', default: 'offline'}, data: {type: 'string'},
@@ -95,11 +96,11 @@ const slow = defineTool({name: 'slow_echo', description: 'Wait ten seconds then 
   }});
 const fail = defineTool({name: 'fail_demo', description: 'Deliberately fail to demonstrate error handling.',
   parameters: Type.Object({}), replay: 'safe', execute: async () => { event('tool'); throw new Error('演示工具失败'); }});
-const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, slow, fail],
+const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, slow, fail, ...calendarTools(event)],
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  })]});
+  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Browser display timezone varies; ask the user for event timezone if unknown. Ask for missing event title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support only listing and creating timed events.`)]});
 const models = createModels();
 let model;
 if (offline) {
@@ -111,6 +112,11 @@ if (offline) {
     if (result) return fauxAssistantMessage((result.isError ? '工具失败：' : '工具结果：') +
       result.content.filter(b => b.type === 'text').map(b => b.text).join('\n'));
     const [command, ...rest] = String(text).split(' ');
+    if (command === '/calendar' || command === '/events') {
+      try { return fauxAssistantMessage(fauxToolCall(command === '/calendar' ? 'create_calendar_event' : 'list_calendar_events', JSON.parse(rest.join(' '))), {stopReason: 'toolUse'}); }
+      catch { return fauxAssistantMessage('请提供有效 JSON 参数；离线模式不具备自然语言理解能力。'); }
+    }
+    if (command === '确认重叠') return fauxAssistantMessage(fauxToolCall('create_calendar_event', {confirmationId: rest.join(' ')}), {stopReason: 'toolUse'});
     const name = {'/note': 'save_note', '/slow': 'slow_echo', '/fail': 'fail_demo'}[command];
     if (name) return fauxAssistantMessage(fauxToolCall(name, name === 'fail_demo' ? {} : {text: rest.join(' ')}), {stopReason: 'toolUse'});
     return fauxAssistantMessage('离线回显（非真实模型）：' + text);
@@ -138,7 +144,7 @@ const harness = await Harness.open(storage, {models, registry,
   settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
   onReport: () => console.error('Durable reported a runtime error; inspect state before continuing.')}, ctx);
 const root = await harness.root(ctx, {agent: {model, extensions: [extension], thinkingLevel: 'off',
-  instructions: '你是 Pi Durable 能力验证助手。用中文回答。可用工具用于保存笔记、延迟回显和演示失败。仅声称已成功执行的结果。不提供差旅供应商查询。'}});
+  instructions: '你是个人日程能力验证助手。用中文回答。使用日历工具读取和新增日程，信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持改期、删除、重复日程、提醒或差旅查询。'}});
 const existing = await root.agent(ctx);
 if (existing.model?.provider !== model.provider || existing.model?.modelId !== model.modelId)
   throw new Error('Stored model differs; use a separate --data directory');
@@ -161,6 +167,7 @@ async function state() {
   const timers = await Promise.all((timerDoc?.items ?? []).map(async item => ({...item, state: (await harness.getTask(item.id, ctx))?.state})));
   return {conversationId: root.id, mode: options.mode, model, messages,
     note: (await harness.snapshot(Notebook, root.id, ctx))?.text ?? '', timers,
+    calendar: (await harness.snapshot(Calendar, root.id, ctx)) ?? {events: [], pending: {}},
     busy: inspection.tasks.some(t => !t.record.background) || inspection.submissions.length > 0, counts, fatal};
 }
 function reply(res, status, value, headers = {}) {
@@ -173,12 +180,20 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'"});
+        'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"});
       return res.end(fs.readFileSync(path.join(here, 'index.html')));
     }
     if (req.method === 'GET' && ['/app.js', '/style.css'].includes(req.url)) {
       res.writeHead(200, {'Content-Type': req.url.endsWith('.js') ? 'text/javascript' : 'text/css'});
       return res.end(fs.readFileSync(path.join(here, req.url.slice(1))));
+    }
+    if (req.method === 'GET' && req.url === '/fullcalendar.js') {
+      res.writeHead(200, {'Content-Type': 'text/javascript'});
+      return res.end(fs.readFileSync(path.join(here, 'node_modules/fullcalendar/index.global.min.js')));
+    }
+    if (req.method === 'GET' && req.url.startsWith('/calendar?')) {
+      const query = new URL(req.url, origin).searchParams;
+      return reply(res, 200, inRange((await harness.snapshot(Calendar, root.id, ctx))?.events ?? [], query.get('start'), query.get('end')));
     }
     if (req.method === 'GET' && req.url === '/state') return reply(res, 200, await state());
     if (req.method !== 'POST') return reply(res, 404, {error: 'Not found'});
@@ -202,6 +217,11 @@ const server = http.createServer(async (req, res) => {
         if (Object.hasOwn(requests.items, input.requestId)) return requests.items[input.requestId] !== input.text;
         if (Object.keys(requests.items).length >= 200) throw new Error('MVP conversation limit reached (200 requests)');
         requests.items[input.requestId] = input.text;
+        const confirmation = /^确认重叠 ([a-f0-9-]{36})$/.exec(input.text.trim());
+        if (confirmation) {
+          const calendar = await tx.doc(Calendar, root.id);
+          if (calendar.pending[confirmation[1]]) calendar.pending[confirmation[1]].authorized = true;
+        }
         return false;
       }, ctx);
       if (conflict) return reply(res, 409, {error: 'requestId already belongs to different text'});
