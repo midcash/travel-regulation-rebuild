@@ -2,7 +2,9 @@
 
 本轮核心是独立的 Pi Durable MVP：在本机浏览器验证对话、工具调用、持久化笔记、取消、后台计时与服务重启后的继续执行。默认使用明确标注的离线合成模型，不查询差旅供应商，不连接 MCP。真实 DeepSeek 由 **pi-ai provider** 接入，再交给 Pi Durable，Pi Durable 是唯一维护的 Agent 运行路径。
 
-这是框架能力 MVP，不代表完整差旅产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 继续定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 继续定义 B01–B12，本轮不改写业务目标。
+产品方向为个人日程 Agent 助手，差旅作为保留的子能力。日程能力尚未定义和实现。
+
+这是框架能力 MVP，不代表完整产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 定义已确认的业务目标（目前为差旅子能力 B01–B12），本轮不改写业务目标。
 
 ## 安装与启动
 
@@ -61,8 +63,8 @@ Windows 需允许探针强杀自己启动的 Node 子进程。检查不加载 `.
 
 ## 保留的业务资产与数据
 
-[RealTools](travel_agent/real_tools.py)、交通/住宿/地点/路线供应商适配、[事实结构](travel_agent/facts.py)、[传输边界](travel_agent/supplier_wire.py) 和 [Trace](travel_agent/telemetry.py) 保留，有独立工具测试，尚未接入 Durable。Trace 不等于业务会话恢复。
+差旅子能力的 [RealTools](travel_agent/real_tools.py)、交通/住宿/地点/路线供应商适配、[事实结构](travel_agent/facts.py)、[传输边界](travel_agent/supplier_wire.py) 和 [Trace](travel_agent/telemetry.py) 保留，有独立工具测试，尚未接入 Durable。Trace 不等于业务会话恢复。
 
-[业务待接入验收索引](verification/baseline/README.md) 区分底层工具与未验证业务行为。[退役 ADR](docs/adr/001-retire-coding-agent.md) 记录历史位置。
+[差旅子能力待接入验收索引](verification/baseline/README.md) 区分底层工具与未验证业务行为。决策记录：[退役 ADR](docs/adr/001-retire-coding-agent.md) 记录历史位置，[ADR 002](docs/adr/002-pivot-to-schedule-assistant.md) 记录转向个人日程助手的决定。
 
 不提交密钥、.env 或本机记录；历史数据库、Trace、experiments 和个人数据不迁移、覆盖或删除。

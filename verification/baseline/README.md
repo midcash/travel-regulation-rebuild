@@ -1,4 +1,4 @@
-# 差旅业务待接入验收索引
+# 差旅子能力待接入验收索引
 
 旧 Worker、页面和协议验收对应历史版本 `d4b4b3b`（PR #54 合并）；脚本已退役，可在 Git 历史查阅，不能作为当前实现通过证明。当前浏览器入口见 [Durable MVP](../durable-mvp/README.md)，业务定义见 [B01–B12](../../docs/product-behavior.md)。
 
