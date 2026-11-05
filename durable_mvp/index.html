@@ -1,13 +1,52 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pi Durable · 能力实验室</title><link rel="stylesheet" href="/style.css"><script src="/fullcalendar.js" defer></script><script src="/calendar-zh-cn.js" defer></script><script src="/luxon.js" defer></script><script src="/calendar-zone.js" defer></script><script src="/app.js" defer></script></head>
-<body><header><span class="mark">π</span><div><h1>Pi Durable</h1><p>能力实验室 · MVP</p></div><span id="mode" class="badge">连接中</span></header>
-<main><section class="conversation"><div class="intro"><span class="eyebrow">从一次对话，走到重启之后</span><h2>让工作接着发生。</h2><p id="description">正在读取持久化会话。</p></div>
-<section class="calendar-panel"><h3>我的日程</h3><p id="calendar-zone" class="hint"></p><div id="calendar"></div><p id="calendar-error" role="status"></p><p id="calendar-detail" role="status"></p></section>
-<div id="messages" aria-live="polite"></div>
-<section id="confirmation-panel" hidden aria-labelledby="confirmation-title" tabindex="-1"><h3 id="confirmation-title">待确认日程</h3><p>以下日程与已有安排重叠，尚未创建。确认后仍保留已有日程。</p><p id="confirmation-status" role="status"></p><div id="calendar-confirmations"></div></section>
-<form id="composer"><label for="text">消息</label><textarea id="text" maxlength="4000" required placeholder="输入消息，或试试 /note 记住这条笔记"></textarea><div class="actions"><span id="status" role="status">连接中</span><button id="cancel" type="button">取消本轮</button><button id="send" type="submit">发送消息 ↗</button></div></form>
-<p id="error" role="alert"></p><button id="retry" hidden>重试同一请求</button><button id="confirmation-shortcut" type="button" hidden></button></section>
-<aside><section class="panel"><h3>持久化笔记</h3><p id="note">暂无笔记</p><p class="hint">由 save_note 工具写入，随会话保存。</p></section>
-<section class="panel"><h3>后台计时</h3><p class="hint">创建十秒任务，在服务重启后继续。取消对话不会取消后台任务。</p><button id="timer">创建十秒计时</button><ul id="timers"></ul></section>
-<section class="panel"><h3>试试能力边界</h3><dl><dt>/note 内容</dt><dd>调用工具保存笔记</dd><dt>/calendar JSON</dt><dd>新增日程，字段 title、start、end、timeZone；时间含时区偏移，例如 2026-11-06T15:00:00+08:00。</dd><dt>/events JSON</dt><dd>按 start、end 查询日程</dd><dt>/slow 内容</dt><dd>十秒工具，可取消或重启恢复</dd><dt>/fail</dt><dd>观察工具失败及后续对话</dd></dl><p class="hint">以上命令仅适用于离线演示。真实模型模式请用自然语言。首期只支持读取和新增单次定时日程。</p></section>
-<section class="panel meta"><h3>运行信息</h3><p id="identity"></p><p id="counts"></p><p class="hint">单用户、单会话。此 MVP 尚未连接 MCP 或差旅供应商。</p></section></aside></main></body></html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>对话 · Pi Durable</title><link rel="stylesheet" href="/style.css"><script src="/fullcalendar.js" defer></script><script src="/calendar-zh-cn.js" defer></script><script src="/luxon.js" defer></script><script src="/calendar-zone.js" defer></script><script src="/app.js" defer></script></head>
+<body>
+<div class="app schedule-open" id="app">
+  <aside class="rail" aria-label="主导航">
+    <div class="brand"><span class="mark" aria-hidden="true">π</span><div class="brand-text"><strong>Pi Durable</strong><span>个人日程助手</span></div></div>
+    <nav class="rail-nav" aria-label="页面">
+      <a class="nav-link active" id="nav-chat" href="#/chat" aria-label="对话" title="对话" aria-current="page"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12v9H8.5L4.5 16v-2.5H4z"/><path d="M7.5 8.5h5M7.5 11h3"/></svg><span>对话</span></a>
+      <a class="nav-link" id="nav-notes" href="#/notes" aria-label="笔记与数据" title="笔记与数据"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h8l2.5 2.5v10.5H5z"/><path d="M13 3.5V6h2.5M7.5 10h5M7.5 13h5"/></svg><span>笔记与数据</span></a>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="rail-card"><span class="eyebrow">运行模式</span><span id="mode" class="badge">连接中</span></div>
+    <p class="rail-foot">能力实验室 · MVP</p>
+  </aside>
+
+  <main class="workspace">
+    <section class="view chat-view" id="chat-view" aria-label="对话">
+      <header class="view-header"><div class="view-heading"><span class="eyebrow">Conversation</span><h1>对话</h1><p>以对话安排和查询日程，右侧同步展示结果。</p></div><button class="ghost-button" id="schedule-toggle" type="button" aria-controls="schedule-panel" aria-expanded="true">收起日程</button></header>
+      <div class="chat-scroll" id="chat-scroll">
+        <div class="intro"><span class="eyebrow">从一次对话，走到重启之后</span><h2>让工作接着发生。</h2><p id="description">正在读取持久化会话。</p></div>
+        <div id="messages" aria-live="polite"></div>
+      </div>
+      <div class="composer-dock">
+        <div class="composer-alerts"><p id="error" role="alert"></p><button id="retry" hidden>重试同一请求</button><button id="confirmation-shortcut" type="button" hidden></button></div>
+        <form id="composer"><label class="sr-only" for="text">消息</label><textarea id="text" maxlength="4000" required placeholder="输入消息，或试试 /note 记住这条笔记"></textarea><div class="actions"><span id="status" role="status">连接中</span><button id="cancel" type="button">取消本轮</button><button id="send" type="submit">发送消息 <span aria-hidden="true">↗</span></button></div></form>
+        <p class="composer-hint">离线演示命令与运行信息在 <a href="#/notes">笔记与数据</a>；日程统一按 UTC−8 显示。</p>
+      </div>
+    </section>
+
+    <section class="view notes-view" id="notes-view" aria-label="笔记与数据" hidden>
+      <header class="view-header"><div class="view-heading"><span class="eyebrow">Library</span><h1>笔记与数据</h1><p>持久化内容、后台任务与运行信息集中在这里。</p></div><button class="ghost-button" id="schedule-toggle-notes" type="button" aria-controls="schedule-panel" aria-expanded="true">收起日程</button></header>
+      <div class="notes-scroll"><div class="notes-grid">
+        <section class="panel"><h2>持久化笔记</h2><p id="note" class="note-body">暂无笔记</p><p class="hint">由 save_note 工具写入，随会话保存。</p></section>
+        <section class="panel"><h2>后台计时</h2><p class="hint">创建十秒任务，在服务重启后继续。取消对话不会取消后台任务。</p><button id="timer">创建十秒计时</button><ul id="timers"></ul></section>
+        <section class="panel"><h2>试试能力边界</h2><dl><dt>/note 内容</dt><dd>调用工具保存笔记</dd><dt>/calendar JSON</dt><dd>新增日程，字段 title、start、end、timeZone；时间含时区偏移，例如 2026-11-06T15:00:00+08:00。</dd><dt>/events JSON</dt><dd>按 start、end 查询日程</dd><dt>/slow 内容</dt><dd>十秒工具，可取消或重启恢复</dd><dt>/fail</dt><dd>观察工具失败及后续对话</dd></dl><p class="hint">以上命令仅适用于离线演示。真实模型模式请用自然语言。首期只支持读取和新增单次定时日程。</p></section>
+        <section class="panel meta"><h2>运行信息</h2><p id="identity"></p><p id="counts"></p><p class="hint">单用户、单会话。此 MVP 尚未连接 MCP 或差旅供应商。</p></section>
+      </div></div>
+    </section>
+  </main>
+
+  <aside class="schedule" id="schedule-panel" aria-label="日程侧边栏">
+    <header class="schedule-header"><div><span class="eyebrow">Schedule</span><h2>我的日程</h2></div><button class="icon-button" id="schedule-close" type="button" aria-label="收起日程" aria-controls="schedule-panel">×</button></header>
+    <div class="schedule-body">
+      <p id="calendar-zone" class="hint"></p>
+      <div class="calendar-card"><div id="calendar"></div></div>
+      <p id="calendar-error" role="status"></p>
+      <p id="calendar-detail" role="status"></p>
+      <section id="confirmation-panel" hidden aria-labelledby="confirmation-title" tabindex="-1"><h3 id="confirmation-title">待确认日程</h3><p>以下日程与已有安排重叠，尚未创建。确认后仍保留已有日程。</p><p id="confirmation-status" role="status"></p><div id="calendar-confirmations"></div></section>
+    </div>
+  </aside>
+</div>
+</body></html>

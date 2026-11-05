@@ -184,7 +184,8 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(path.join(here, 'index.html')));
     }
     if (req.method === 'GET' && ['/app.js', '/style.css'].includes(req.url)) {
-      res.writeHead(200, {'Content-Type': req.url.endsWith('.js') ? 'text/javascript' : 'text/css'});
+      res.writeHead(200, {'Content-Type': req.url.endsWith('.js') ? 'text/javascript' : 'text/css',
+        'Cache-Control': 'no-store'});
       return res.end(fs.readFileSync(path.join(here, req.url.slice(1))));
     }
     if (req.method === 'GET' && req.url === '/fullcalendar.js') {
