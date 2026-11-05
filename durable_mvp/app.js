@@ -20,6 +20,47 @@ new ResizeObserver(([entry]) => {
   requestAnimationFrame(() => calendar.updateSize());
 }).observe($('calendar'));
 $('calendar-zone').textContent = '显示时区：UTC−8（固定 −08:00）';
+// Layout-only controls: navigation and the collapsible schedule rail never touch conversation state.
+const app = $('app');
+const scheduleButtons = [$('schedule-toggle'), $('schedule-toggle-notes')];
+let scheduleOpen = !window.matchMedia('(max-width: 860px)').matches;
+function setSchedule(open) {
+  scheduleOpen = open;
+  app.classList.toggle('schedule-open', open);
+  app.classList.toggle('schedule-closed', !open);
+  for (const button of scheduleButtons) {
+    button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? '收起日程' : '显示日程';
+  }
+  requestAnimationFrame(() => calendar.updateSize());
+}
+for (const button of scheduleButtons) button.onclick = () => setSchedule(!scheduleOpen);
+$('schedule-close').onclick = () => setSchedule(false);
+setSchedule(scheduleOpen);
+let narrowLayout = window.matchMedia('(max-width: 860px)').matches;
+addEventListener('resize', () => {
+  const nowNarrow = window.matchMedia('(max-width: 860px)').matches;
+  if (nowNarrow === narrowLayout) return;
+  narrowLayout = nowNarrow;
+  setSchedule(!nowNarrow);
+});
+const composerText = $('text');
+composerText.addEventListener('input', () => {
+  composerText.style.height = 'auto';
+  composerText.style.height = Math.min(composerText.scrollHeight, 180) + 'px';
+});
+function showView() {
+  const notes = location.hash === '#/notes';
+  $('chat-view').hidden = notes;
+  $('notes-view').hidden = !notes;
+  for (const [id, active] of [['nav-chat', !notes], ['nav-notes', notes]]) {
+    $(id).classList.toggle('active', active);
+    if (active) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current');
+  }
+  document.title = (notes ? '笔记与数据' : '对话') + ' · Pi Durable';
+}
+addEventListener('hashchange', showView);
+showView();
 let renderedCalendar = '', renderedPending = '';
 let sending = false, healthy = false, current;
 let refreshId = 0;
@@ -44,8 +85,12 @@ function controls() {
   setText('confirmation-status', !healthy ? '连接中断，恢复后可确认。' : pending ? '有未确认提交的请求，请先重试同一请求。' : sending || current?.busy ? '正在处理会话，完成后可确认。' : '请核对时间，再选择是否确认创建。');
 }
 $('confirmation-shortcut').onclick = () => {
-  $('confirmation-panel').scrollIntoView({block: 'center'});
-  $('confirmation-panel').focus({preventScroll: true});
+  if (!scheduleOpen) setSchedule(true);
+  requestAnimationFrame(() => {
+    const panel = $('confirmation-panel');
+    panel.scrollIntoView({block: 'center'});
+    panel.focus({preventScroll: true});
+  });
 };
 let renderedMessages = '';
 function setText(id, value) { if ($(id).textContent !== value) $(id).textContent = value; }
@@ -57,19 +102,25 @@ function draw(state) {
   // The conversation is a live region: redraw only when its content really changed.
   const signature = JSON.stringify(state.messages);
   if (signature !== renderedMessages) {
+    const scroller = $('chat-scroll');
+    const follow = renderedMessages === '' || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
     renderedMessages = signature;
     $('messages').replaceChildren();
     for (const message of state.messages) {
       if (!message.text && !message.calls.length) continue;
       const item = document.createElement('article');
       item.className = 'message ' + message.role;
-      const label = document.createElement('strong');
-      label.textContent = {user: '你', assistant: '助手', toolResult: '工具返回'}[message.role];
+      if (message.role === 'toolResult') {
+        const label = document.createElement('strong');
+        label.textContent = '工具返回';
+        item.append(label);
+      }
       const text = document.createElement('p'); text.textContent = message.text;
-      item.append(label, text);
+      item.append(text);
       if (message.calls.length) { const calls = document.createElement('small'); calls.textContent = '调用工具：' + message.calls.join(', '); item.append(calls); }
       $('messages').append(item);
     }
+    if (follow) scroller.scrollTop = scroller.scrollHeight;
   }
   setText('note', state.note || '暂无笔记');
   const calendarSignature = JSON.stringify(state.calendar.events);
@@ -124,7 +175,7 @@ async function submit() {
   sending = true; controls(); $('error').textContent = '';
   try {
     await api('/prompt', pending);
-    if ($('text').value === pending.text) $('text').value = '';
+    if ($('text').value === pending.text) { $('text').value = ''; composerText.style.height = ''; }
     pending = null; sessionStorage.removeItem('durable-mvp-pending');
   } catch (error) { $('error').textContent = error.message + '。请求未确认，可用相同 ID 重试。'; }
   finally { sending = false; await refresh(); }

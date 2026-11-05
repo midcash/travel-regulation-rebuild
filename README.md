@@ -55,7 +55,7 @@ python -B -X utf8 -m travel_agent --mode deepseek
 
 - [durable_mvp/server.mjs](durable_mvp/server.mjs)：HTTP、pi-ai、Pi Durable Harness、SQLite、原生工具和任务。
 - [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询与创建工具、重叠候选和事务去重。
-- [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：展示并轮询保存的结果，同时提交消息、取消和后台计时操作。
+- [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：左中右三栏；输入框固定在对话区底部，日程与重叠确认在右侧可伸缩侧边栏，笔记、计时、命令说明和运行信息在 `#/notes` 视图。交互仍轮询保存的结果，并提交消息、取消和后台计时操作。
 - [启动入口](travel_agent/__main__.py)。
 - [本轮验收](verification/durable-mvp/README.md)：运行方式、断言和浏览器观察。
 - [底层 Durable 探针](verification/durable-step0/README.md)：原子性、存储失败和已提交状态等已有验证。
