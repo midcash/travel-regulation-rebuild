@@ -3,7 +3,7 @@
 ## 项目事实与决策边界
 
 - 开始工作先读 `README.md`、`CONTEXT.md` 和 `docs/product-behavior.md`。
-- `CONTEXT.md` 定义领域术语与语义；`docs/product-behavior.md` 定义 B01–B12 业务验收目标；源码与测试描述当前实现事实。
+- `CONTEXT.md` 定义领域术语与语义；`docs/product-behavior.md` 定义已确认的业务验收目标；源码与测试描述当前实现事实。
 - 不要把历史方案、已关闭 Issue、已归档 PR 或现有测试中的旧约束自动视为当前需求。技术架构决定必须由明确批准的当前任务确定。
 - 不重复维护同一事实的多份文档。若业务要求与实现不一致，保留业务要求，报告实现缺口，不要悄悄改写业务语义。
 
