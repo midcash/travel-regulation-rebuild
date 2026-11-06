@@ -149,7 +149,7 @@ function draw(state) {
       detail.textContent = `${formatTime(item.event.start)} — ${formatTime(item.event.end)}（UTC−8）`;
       const conflicts = document.createElement('p');
       conflicts.textContent = '重叠安排：' + (item.conflicts ?? []).map(e => `${e.title}（${formatTime(e.start)} — ${formatTime(e.end)}）`).join('；');
-      const button = document.createElement('button'); button.textContent = '确认创建';
+      const button = document.createElement('button'); button.textContent = item.updateId ? '确认修改' : '确认创建';
       button.onclick = () => {
         if (sending || pending || !healthy || current?.busy) return;
         pending = {text: '确认重叠 ' + id, requestId: crypto.randomUUID()};
