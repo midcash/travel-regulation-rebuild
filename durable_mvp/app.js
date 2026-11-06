@@ -88,7 +88,9 @@ function controls() {
   $('retry').hidden = !pending;
   $('retry').disabled = !healthy || sending;
   for (const button of $('calendar-confirmations').querySelectorAll('button')) button.disabled = !healthy || sending || current?.busy || !!pending;
-  setText('confirmation-status', !healthy ? '连接中断，恢复后可确认。' : pending ? '有未确认提交的请求，请先重试同一请求。' : sending || current?.busy ? '正在处理会话，完成后可确认。' : '请核对时间，再选择是否确认创建。');
+  const items = Object.values(current?.calendar.pending ?? {}).filter(item => !item.result);
+  const action = items.some(item => item.updateId) ? (items.some(item => !item.updateId) ? '创建或修改' : '修改') : '创建';
+  setText('confirmation-status', !healthy ? '连接中断，恢复后可确认。' : pending ? '有未确认提交的请求，请先重试同一请求。' : sending || current?.busy ? '正在处理会话，完成后可确认。' : `请核对时间，再选择是否确认${action}。`);
 }
 $('confirmation-shortcut').onclick = () => {
   if (!scheduleOpen) setSchedule(true);
@@ -147,6 +149,8 @@ function draw(state) {
       const title = document.createElement('h4'); title.textContent = item.event.title;
       const detail = document.createElement('p');
       detail.textContent = `${formatTime(item.event.start)} — ${formatTime(item.event.end)}（UTC−8）`;
+      const effect = document.createElement('p');
+      effect.textContent = item.updateId ? '尚未修改。确认后将替换原日程，保留其他已有日程。' : '尚未创建。确认后新增日程，保留已有日程。';
       const conflicts = document.createElement('p');
       conflicts.textContent = '重叠安排：' + (item.conflicts ?? []).map(e => `${e.title}（${formatTime(e.start)} — ${formatTime(e.end)}）`).join('；');
       const button = document.createElement('button'); button.textContent = item.updateId ? '确认修改' : '确认创建';
@@ -155,7 +159,7 @@ function draw(state) {
         pending = {text: '确认重叠 ' + id, requestId: crypto.randomUUID()};
         sessionStorage.setItem('durable-mvp-pending', JSON.stringify(pending)); void submit();
       };
-      card.append(title, detail, conflicts, button); $('calendar-confirmations').append(card);
+      card.append(title, detail, effect, conflicts, button); $('calendar-confirmations').append(card);
     }
   }
   setText('identity', `会话 ${state.conversationId} · ${state.model.provider}`);

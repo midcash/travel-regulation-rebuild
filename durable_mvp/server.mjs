@@ -143,11 +143,14 @@ const storage = await openNodeSqliteStorage(path.join(folder, 'session.sqlite'))
 const harness = await Harness.open(storage, {models, registry,
   settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
   onReport: () => console.error('Durable reported a runtime error; inspect state before continuing.')}, ctx);
-const root = await harness.root(ctx, {agent: {model, extensions: [extension], thinkingLevel: 'off',
-  instructions: '你是个人日程能力验证助手。用中文回答。使用日历工具读取和新增日程，信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持改期、删除、重复日程、提醒或差旅查询。'}});
+const instructions = '你是个人日程能力验证助手。用中文回答。支持读取、新增、修改、改期和删除单次定时日程。修改或删除前先查询并使用已有日程 ID，匹配不唯一先追问；修改保留未指定字段，改期保留时长，优先直接修改而非先删后建。新增信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持重复日程、提醒或差旅查询。';
+const root = await harness.root(ctx, {agent: {model, extensions: [extension], thinkingLevel: 'off', instructions}});
 const existing = await root.agent(ctx);
 if (existing.model?.provider !== model.provider || existing.model?.modelId !== model.modelId)
   throw new Error('Stored model differs; use a separate --data directory');
+// root() only applies defaults when creating a conversation. Refresh the app-owned
+// instructions before resuming existing sessions, without replacing their data.
+if (existing.instructions !== instructions) await root.configure({instructions}, ctx);
 let fatal = false;
 // The framework resumes unfinished model/tool tasks. This can repeat paid calls in real mode.
 harness.resume();

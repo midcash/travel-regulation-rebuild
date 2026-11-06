@@ -27,11 +27,12 @@ export function inRange(events, start, end) {
 }
 export function calendarTools(event) {
   const write = (updating = false) => defineTool({name: updating ? 'update_calendar_event' : 'create_calendar_event',
-    description: 'Create or update ONE event with title, start, end (explicit offsets) and optional IANA timeZone (defaults to Etc/GMT+8, fixed UTC-8). Ask user for missing title/date/start/end. On needs_confirmation ask user to use the page confirmation button. Never claim success unless status is created or updated. confirmationId retries a pending event; only server-recorded user confirmation authorizes overlap. For update pass eventId from list_calendar_events; omitted fields retain saved values. No recurrence/reminders.',
-    parameters: Type.Object({eventId: Type.Optional(Type.String()), title: Type.Optional(Type.String({maxLength: 200})), start: Type.Optional(Type.String()),
+    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events; omitted fields retain saved values. Never create a replacement event for an edit.' : 'Create ONE NEW event; never use this tool to edit a saved event or pass eventId.') + ' Provide title, start, end (explicit offsets) for creation; optional IANA timeZone defaults to Etc/GMT+8 (fixed UTC-8). Ask for missing creation fields. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence/reminders.',
+    parameters: Type.Object({...(updating ? {eventId: Type.Optional(Type.String())} : {}), title: Type.Optional(Type.String({maxLength: 200})), start: Type.Optional(Type.String()),
       end: Type.Optional(Type.String()), timeZone: Type.Optional(Type.String()), confirmationId: Type.Optional(Type.String())}), replay: 'safe',
     execute: async (input, api, context) => {
       event('tool');
+      if (!updating && Object.hasOwn(input, 'eventId')) throw new Error('创建工具不接受 eventId；修改请使用 update_calendar_event');
       return api.commit(async tx => {
         const doc = await tx.doc(Calendar, api.conversationId);
         if (Object.hasOwn(doc.operations, api.callId)) return output(doc.operations[api.callId]);

@@ -2,7 +2,7 @@
 
 本轮核心是独立的 Pi Durable MVP：在本机浏览器验证对话、工具调用、持久化笔记、取消、后台计时与服务重启后的继续执行。默认使用明确标注的离线合成模型，不查询差旅供应商，不连接 MCP。真实 DeepSeek 由 **pi-ai provider** 接入，再交给 Pi Durable，Pi Durable 是唯一维护的 Agent 运行路径。
 
-产品方向为个人日程 Agent 助手，差旅作为保留的子能力。本轮新增会话读取、新增日程及 FullCalendar 视图；确认目标见 `docs/product-behavior.md` 的 S01–S04。
+产品方向为个人日程 Agent 助手，差旅作为保留的子能力。支持会话读取、新增、修改、删除和改期日程及 FullCalendar 视图；确认目标见 `docs/product-behavior.md` 的 S01–S05。
 
 这是能力 MVP，不代表完整产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 定义日程与差旅子能力的已确认目标。
 
@@ -56,7 +56,7 @@ python -B -X utf8 -m travel_agent --mode deepseek
 ## 源码与能力边界
 
 - [durable_mvp/server.mjs](durable_mvp/server.mjs)：HTTP、pi-ai、Pi Durable Harness、SQLite、原生工具和任务。
-- [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询与创建工具、重叠候选和事务去重。
+- [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询、新增、修改与删除工具、重叠候选和事务去重。
 - [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：左中右三栏；输入框固定在对话区底部，日程与重叠确认在右侧可伸缩侧边栏，笔记、计时、命令说明和运行信息在 `#/notes` 视图。交互仍轮询保存的结果，并提交消息、取消和后台计时操作。
 - [启动入口](travel_agent/__main__.py)。
 - [本轮验收](verification/durable-mvp/README.md)：运行方式、断言和浏览器观察。
