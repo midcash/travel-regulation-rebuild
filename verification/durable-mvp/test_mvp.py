@@ -141,6 +141,93 @@ class MVPTests(unittest.TestCase):
         self.assertEqual(retried['calendar'], state['calendar'])
         self.assertEqual(retried['counts'], {'model': 0, 'tool': 0})
 
+    def test_calendar_update_delete_and_move(self):
+        event = dict(title='动车', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00')
+        state = self.calendar_prompt(event, 'seed')
+        saved = state['calendar']['events'][0]
+        def tool(command, args, key):
+            self.host.prompt(command + ' ' + json.dumps(args), key)
+            return self.host.wait()
+        state = tool('/update', dict(eventId=saved['id'], title='航班'), 'rename')
+        updated = state['calendar']['events'][0]
+        self.assertEqual(updated, {**saved, 'title': '航班'})
+        state = tool('/update', dict(eventId=saved['id'], start='2026-11-08T21:00:00-08:00', end='2026-11-08T22:00:00-08:00'), 'move')
+        moved = state['calendar']['events'][0]
+        self.assertEqual(moved['id'], saved['id'])
+        self.assertEqual(moved['title'], '航班')
+        self.assertEqual(moved['start'], '2026-11-08T21:00:00-08:00')
+        self.assertEqual(moved['end'], '2026-11-08T22:00:00-08:00')
+        invalid = tool('/update', dict(eventId=saved['id'], end=moved['start']), 'invalid')
+        self.assertEqual(invalid['calendar']['events'], [moved])
+        absent = tool('/delete', dict(eventId='unknown'), 'absent')
+        self.assertEqual(absent['calendar']['events'], [moved])
+        state = tool('/delete', dict(eventId=saved['id']), 'delete')
+        self.assertEqual(state['calendar']['events'], [])
+        self.restart()
+        self.assertEqual(self.host.wait()['calendar'], state['calendar'])
+        retry = tool('/delete', dict(eventId=saved['id']), 'delete')
+        self.assertEqual(retry['counts'], {'model': 0, 'tool': 0})
+
+    def test_calendar_create_rejects_edit_id(self):
+        event = dict(title='原安排', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00')
+        before = self.calendar_prompt(event, 'original')['calendar']
+        saved = before['events'][0]
+        # A non-overlapping mistaken create must fail, rather than silently duplicate.
+        bad = {**event, 'eventId': saved['id'], 'start': '2026-11-08T21:00:00-08:00', 'end': '2026-11-08T22:00:00-08:00'}
+        state = self.calendar_prompt(bad, 'mistaken-create')
+        self.assertEqual(state['calendar'], before)
+        result = next(m for m in reversed(state['messages']) if m['role'] == 'toolResult')
+        self.assertIn('update_calendar_event', result['text'])
+        self.assertIn('工具失败', state['messages'][-1]['text'])
+
+    def test_existing_session_refreshes_app_instructions(self):
+        before = self.calendar_prompt(dict(title='保留日程', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00'), 'keep')
+        def config(mode):
+            result = subprocess.run(['node', '--input-type=module', '-', self.temp.name, mode],
+                input=(ROOT / 'verification/durable-mvp/agent_instructions.mjs').read_text(encoding='utf-8'),
+                cwd=ROOT / 'durable_mvp', capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return json.loads(result.stdout)
+        self.host.kill()
+        self.assertIn('不支持改期', config('seed'))
+        self.host = Host(self.temp.name)
+        after = self.host.wait()
+        self.assertEqual(after['messages'], before['messages'])
+        self.assertEqual(after['calendar'], before['calendar'])
+        self.assertEqual(after['counts'], {'model': 0, 'tool': 0})
+        self.host.kill()
+        instructions = config('read')
+        self.assertIn('支持读取、新增、修改、改期和删除', instructions)
+        self.assertNotIn('不支持改期', instructions)
+
+    def test_calendar_update_overlap_confirmation_and_deleted_target(self):
+        a = dict(title='原安排', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00')
+        b = dict(title='另一个安排', start='2026-11-07T21:00:00-08:00', end='2026-11-07T22:00:00-08:00')
+        first = self.calendar_prompt(a, 'a')['calendar']['events'][0]
+        self.calendar_prompt(b, 'b')
+        self.host.prompt('/update ' + json.dumps(dict(eventId=first['id'], start=b['start'], end=b['end'])), 'overlap')
+        state = self.host.wait()
+        self.assertEqual(state['calendar']['events'][0], first)
+        cid = next(iter(state['calendar']['pending']))
+        self.restart()
+        self.host.prompt('确认重叠 ' + cid, 'confirm')
+        state = self.host.wait()
+        self.assertEqual(len(state['calendar']['events']), 2)
+        self.assertEqual(state['calendar']['events'][0]['start'], b['start'])
+        self.assertEqual(state['calendar']['events'][0]['end'], b['end'])
+        self.assertEqual(state['calendar']['events'][0]['id'], first['id'])
+        self.host.prompt('确认重叠 ' + cid, 'confirm-again')
+        self.assertEqual(self.host.wait()['calendar']['events'], state['calendar']['events'])
+        self.host.prompt('/update ' + json.dumps(dict(eventId=first['id'], title='新标题')), 'pending-again')
+        state = self.host.wait()
+        cid = next(key for key, value in state['calendar']['pending'].items() if not value.get('result'))
+        self.host.prompt('/delete ' + json.dumps(dict(eventId=first['id'])), 'remove-target')
+        remaining = self.host.wait()['calendar']['events']
+        self.host.prompt('确认重叠 ' + cid, 'confirm-deleted')
+        state = self.host.wait()
+        self.assertEqual(state['calendar']['events'], remaining)
+        self.assertEqual(state['calendar']['pending'][cid]['result']['status'], 'not_found')
+
     def test_calendar_missing_invalid_and_overlap_confirmation(self):
         state = self.calendar_prompt({'title': '信息不足'}, 'missing-1')
         self.assertIn('needs_information', state['messages'][-1]['text'])

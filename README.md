@@ -2,7 +2,7 @@
 
 本轮核心是独立的 Pi Durable MVP：在本机浏览器验证对话、工具调用、持久化笔记、取消、后台计时与服务重启后的继续执行。默认使用明确标注的离线合成模型，不查询差旅供应商，不连接 MCP。真实 DeepSeek 由 **pi-ai provider** 接入，再交给 Pi Durable，Pi Durable 是唯一维护的 Agent 运行路径。
 
-产品方向为个人日程 Agent 助手，差旅作为保留的子能力。本轮新增会话读取、新增日程及 FullCalendar 视图；确认目标见 `docs/product-behavior.md` 的 S01–S04。
+产品方向为个人日程 Agent 助手，差旅作为保留的子能力。支持会话读取、新增、修改、删除和改期日程及 FullCalendar 视图；确认目标见 `docs/product-behavior.md` 的 S01–S05。
 
 这是能力 MVP，不代表完整产品或真实模型端到端验收通过。[CONTEXT.md](CONTEXT.md) 定义业务术语，[docs/product-behavior.md](docs/product-behavior.md) 定义日程与差旅子能力的已确认目标。
 
@@ -26,7 +26,7 @@ python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 
 ### 日历视图与工具
 
-页面使用本地安装的 FullCalendar 6.1.20（MIT），支持月、周、日视图；显式加载中文语言包，显示时区固定为 UTC−8（Etc/GMT+8，−08:00，不随夏令时变化）。点击事件查看完整起止时间。两个原生工具为 `list_calendar_events` 和 `create_calendar_event`，与页面 HTTP 查询共用 Durable 文档及 `session.sqlite`，不另建数据库、不迁移旧数据。
+页面使用本地安装的 FullCalendar 6.1.20（MIT），支持月、周、日视图；显式加载中文语言包，显示时区固定为 UTC−8（Etc/GMT+8，−08:00，不随夏令时变化）。点击事件查看完整起止时间。四个原生工具为 `list_calendar_events`、`create_calendar_event`、`update_calendar_event` 和 `delete_calendar_event`，与页面 HTTP 查询共用 Durable 文档及 `session.sqlite`，不另建数据库、不迁移旧数据。
 
 离线模式示例（仅合成模型指令，不代表自然语言理解）：
 
@@ -35,7 +35,9 @@ python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 /events {"start":"2026-11-06T00:00:00+08:00","end":"2026-11-07T00:00:00+08:00"}
 ```
 
-真实模式使用自然语言。缺少标题、日期或开始/结束时间时先追问；未另行指定时区时采用已确认的 UTC−8，不默认补时长。工具校验时间与 IANA 时区一致，按半开区间判断重叠；重叠时保存候选并展示确认按钮并列出冲突，用户点击后通过会话提交 `确认重叠 <标识>`，服务端记录授权，工具重新核对当前冲突；出现未展示的新冲突时更新清单并要求再次确认，否则才创建。暂不支持修改、删除、全天、重复日程或提醒。
+真实模式使用自然语言。缺少标题、日期或开始/结束时间时先追问；未另行指定时区时采用已确认的 UTC−8，不默认补时长。工具校验时间与 IANA 时区一致，按半开区间判断重叠；重叠时保存候选并展示确认按钮并列出冲突，用户点击后通过会话提交 `确认重叠 <标识>`，服务端记录授权，工具重新核对当前冲突；出现未展示的新冲突时更新清单并要求再次确认，否则才创建。支持通过会话按查询所得 ID 修改和删除日程；修改保留未指定字段，改期保留原 ID，重叠时确认后才替换原安排。匹配不唯一时先追问。暂不支持全天、重复日程或提醒。
+
+离线可用 `/update {"eventId":"查询返回的 ID","title":"航班"}` 和 `/delete {"eventId":"查询返回的 ID"}` 验证工具；自然语言及多工具自主组合需使用真实模型，离线命令不代表语言理解验收。
 
 相同 HTTP 请求 ID 沿用现有提交去重；日程、创建工具 call ID 对应的结果和变更记录在同一 Durable 事务提交，恢复重放返回原结果。确认候选保存原日程 ID 和最终结果，重复确认也不会新增事件。新请求表达相同内容不会自动视为重复，而会走重叠确认。上限为 200 条已创建日程。
 
@@ -54,7 +56,7 @@ python -B -X utf8 -m travel_agent --mode deepseek
 ## 源码与能力边界
 
 - [durable_mvp/server.mjs](durable_mvp/server.mjs)：HTTP、pi-ai、Pi Durable Harness、SQLite、原生工具和任务。
-- [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询与创建工具、重叠候选和事务去重。
+- [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询、新增、修改与删除工具、重叠候选和事务去重。
 - [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：左中右三栏；输入框固定在对话区底部，日程与重叠确认在右侧可伸缩侧边栏，笔记、计时、命令说明和运行信息在 `#/notes` 视图。交互仍轮询保存的结果，并提交消息、取消和后台计时操作。
 - [启动入口](travel_agent/__main__.py)。
 - [本轮验收](verification/durable-mvp/README.md)：运行方式、断言和浏览器观察。

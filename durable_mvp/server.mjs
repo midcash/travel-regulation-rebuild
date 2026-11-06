@@ -100,7 +100,7 @@ const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, sl
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Default calendar timezone is fixed UTC-8 (Etc/GMT+8, offset -08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support only listing and creating timed events.`)]});
+  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Default calendar timezone is fixed UTC-8 (Etc/GMT+8, offset -08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
 const models = createModels();
 let model;
 if (offline) {
@@ -112,8 +112,8 @@ if (offline) {
     if (result) return fauxAssistantMessage((result.isError ? '工具失败：' : '工具结果：') +
       result.content.filter(b => b.type === 'text').map(b => b.text).join('\n'));
     const [command, ...rest] = String(text).split(' ');
-    if (command === '/calendar' || command === '/events') {
-      try { return fauxAssistantMessage(fauxToolCall(command === '/calendar' ? 'create_calendar_event' : 'list_calendar_events', JSON.parse(rest.join(' '))), {stopReason: 'toolUse'}); }
+    if (['/calendar', '/events', '/update', '/delete'].includes(command)) {
+      try { return fauxAssistantMessage(fauxToolCall(({'/calendar': 'create_calendar_event', '/events': 'list_calendar_events', '/update': 'update_calendar_event', '/delete': 'delete_calendar_event'})[command], JSON.parse(rest.join(' '))), {stopReason: 'toolUse'}); }
       catch { return fauxAssistantMessage('请提供有效 JSON 参数；离线模式不具备自然语言理解能力。'); }
     }
     if (command === '确认重叠') return fauxAssistantMessage(fauxToolCall('create_calendar_event', {confirmationId: rest.join(' ')}), {stopReason: 'toolUse'});
@@ -143,11 +143,14 @@ const storage = await openNodeSqliteStorage(path.join(folder, 'session.sqlite'))
 const harness = await Harness.open(storage, {models, registry,
   settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
   onReport: () => console.error('Durable reported a runtime error; inspect state before continuing.')}, ctx);
-const root = await harness.root(ctx, {agent: {model, extensions: [extension], thinkingLevel: 'off',
-  instructions: '你是个人日程能力验证助手。用中文回答。使用日历工具读取和新增日程，信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持改期、删除、重复日程、提醒或差旅查询。'}});
+const instructions = '你是个人日程能力验证助手。用中文回答。支持读取、新增、修改、改期和删除单次定时日程。修改或删除前先查询并使用已有日程 ID，匹配不唯一先追问；修改保留未指定字段，改期保留时长，优先直接修改而非先删后建。新增信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持重复日程、提醒或差旅查询。';
+const root = await harness.root(ctx, {agent: {model, extensions: [extension], thinkingLevel: 'off', instructions}});
 const existing = await root.agent(ctx);
 if (existing.model?.provider !== model.provider || existing.model?.modelId !== model.modelId)
   throw new Error('Stored model differs; use a separate --data directory');
+// root() only applies defaults when creating a conversation. Refresh the app-owned
+// instructions before resuming existing sessions, without replacing their data.
+if (existing.instructions !== instructions) await root.configure({instructions}, ctx);
 let fatal = false;
 // The framework resumes unfinished model/tool tasks. This can repeat paid calls in real mode.
 harness.resume();
