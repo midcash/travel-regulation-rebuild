@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
-const displayZone = 'Etc/GMT+8'; // IANA's Etc/GMT sign is reversed: this is fixed UTC-8.
+const displayZone = 'Etc/GMT-8'; // IANA's Etc/GMT sign is reversed: this is fixed UTC+8.
+const zoneLabel = 'UTC+8';
 const formatTime = value => new Intl.DateTimeFormat('zh-CN', {timeZone: displayZone, dateStyle: 'medium', timeStyle: 'short', hourCycle: 'h23'}).format(new Date(value));
+const formatClock = value => new Intl.DateTimeFormat('zh-CN', {timeZone: displayZone, timeStyle: 'short', hourCycle: 'h23'}).format(new Date(value));
 let calendarFailed = false;
 const calendar = new FullCalendar.Calendar($('calendar'), {
   initialView: 'dayGridMonth', locale: 'zh-cn', timeZone: displayZone, height: 'auto',
@@ -9,7 +11,7 @@ const calendar = new FullCalendar.Calendar($('calendar'), {
   events: '/calendar',
   eventSourceFailure: () => { calendarFailed = true; $('calendar-error').textContent = '日历加载失败，正在重试。'; },
   eventSourceSuccess: () => { calendarFailed = false; $('calendar-error').textContent = ''; },
-  eventClick: ({event}) => { $('calendar-detail').textContent = `${event.title} · ${formatTime(event.start)} — ${formatTime(event.end)}（UTC−8）`; },
+  eventClick: ({event}) => { $('calendar-detail').textContent = `${event.title} · ${formatTime(event.start)} — ${formatTime(event.end)}（${zoneLabel}）`; },
 });
 calendar.render();
 // FullCalendar's inner tables cache pixel widths; update after the container resizes.
@@ -19,7 +21,7 @@ new ResizeObserver(([entry]) => {
   calendarWidth = entry.contentRect.width;
   requestAnimationFrame(() => calendar.updateSize());
 }).observe($('calendar'));
-$('calendar-zone').textContent = '显示时区：UTC−8（固定 −08:00）';
+$('calendar-zone').textContent = `显示时区：${zoneLabel}（固定 +08:00）`;
 // Layout-only controls: navigation and the collapsible schedule rail never touch conversation state.
 const app = $('app');
 const scheduleButtons = [$('schedule-toggle'), $('schedule-toggle-notes')];
@@ -148,7 +150,7 @@ function draw(state) {
       const card = document.createElement('article');
       const title = document.createElement('h4'); title.textContent = item.event.title;
       const detail = document.createElement('p');
-      detail.textContent = `${formatTime(item.event.start)} — ${formatTime(item.event.end)}（UTC−8）`;
+      detail.textContent = `${formatTime(item.event.start)} — ${formatTime(item.event.end)}（${zoneLabel}）`;
       const effect = document.createElement('p');
       effect.textContent = item.updateId ? '尚未修改。确认后将替换原日程，保留其他已有日程。' : '尚未创建。确认后新增日程，保留已有日程。';
       const conflicts = document.createElement('p');
@@ -166,7 +168,7 @@ function draw(state) {
   setText('counts', `本进程模型调用 ${state.counts.model} · 工具调用 ${state.counts.tool}`);
   $('timers').replaceChildren(...state.timers.map(timer => {
     const li = document.createElement('li');
-    li.textContent = timer.state?.status === 'terminal' ? '计时完成' : '等待到期 · ' + new Date(timer.until).toLocaleTimeString();
+    li.textContent = timer.state?.status === 'terminal' ? '计时完成' : '等待到期 · ' + formatClock(timer.until);
     return li;
   }));
 }

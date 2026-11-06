@@ -121,7 +121,7 @@ class MVPTests(unittest.TestCase):
 
     def test_calendar_create_query_restart_and_retry(self):
         event = dict(title='项目评审', start='2026-11-06T15:00:00+08:00',
-                     end='2026-11-06T16:00:00+08:00', timeZone='Asia/Shanghai')
+                     end='2026-11-06T16:00:00+08:00', timeZone='Etc/GMT-8')
         before = self.calendar_prompt(event, 'calendar-1')
         self.assertEqual(len(before['calendar']['events']), 1)
         saved = before['calendar']['events'][0]
@@ -141,8 +141,27 @@ class MVPTests(unittest.TestCase):
         self.assertEqual(retried['calendar'], state['calendar'])
         self.assertEqual(retried['counts'], {'model': 0, 'tool': 0})
 
+    def test_calendar_default_timezone_is_fixed_utc_plus_8(self):
+        event = dict(title='默认时区', start='2026-11-06T09:00:00+08:00',
+                     end='2026-11-06T10:00:00+08:00')
+        state = self.calendar_prompt(event, 'default-zone')
+        self.assertEqual(len(state['calendar']['events']), 1)
+        self.assertEqual(state['calendar']['events'][0]['timeZone'], 'Etc/GMT-8')
+        # A mismatched offset is rejected rather than silently rewritten to UTC+8.
+        other = dict(title='偏移不符', start='2026-11-06T09:00:00+09:00',
+                     end='2026-11-06T10:00:00+09:00')
+        rejected = self.calendar_prompt(other, 'default-zone-mismatch')
+        self.assertEqual(rejected['calendar']['events'], state['calendar']['events'])
+        self.assertIn('时间偏移与 timeZone 不一致',
+                      [m['text'] for m in rejected['messages'] if m['role'] == 'toolResult'][-1])
+        # S01 still allows a user-specified timezone with a matching explicit offset.
+        explicit = {**other, 'timeZone': 'Asia/Tokyo'}
+        allowed = self.calendar_prompt(explicit, 'explicit-zone')
+        self.assertEqual(len(allowed['calendar']['events']), 2)
+        self.assertEqual(allowed['calendar']['events'][1]['timeZone'], 'Asia/Tokyo')
+
     def test_calendar_update_delete_and_move(self):
-        event = dict(title='动车', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00')
+        event = dict(title='动车', start='2026-11-06T21:00:00+08:00', end='2026-11-06T22:00:00+08:00')
         state = self.calendar_prompt(event, 'seed')
         saved = state['calendar']['events'][0]
         def tool(command, args, key):
@@ -151,12 +170,12 @@ class MVPTests(unittest.TestCase):
         state = tool('/update', dict(eventId=saved['id'], title='航班'), 'rename')
         updated = state['calendar']['events'][0]
         self.assertEqual(updated, {**saved, 'title': '航班'})
-        state = tool('/update', dict(eventId=saved['id'], start='2026-11-08T21:00:00-08:00', end='2026-11-08T22:00:00-08:00'), 'move')
+        state = tool('/update', dict(eventId=saved['id'], start='2026-11-08T21:00:00+08:00', end='2026-11-08T22:00:00+08:00'), 'move')
         moved = state['calendar']['events'][0]
         self.assertEqual(moved['id'], saved['id'])
         self.assertEqual(moved['title'], '航班')
-        self.assertEqual(moved['start'], '2026-11-08T21:00:00-08:00')
-        self.assertEqual(moved['end'], '2026-11-08T22:00:00-08:00')
+        self.assertEqual(moved['start'], '2026-11-08T21:00:00+08:00')
+        self.assertEqual(moved['end'], '2026-11-08T22:00:00+08:00')
         invalid = tool('/update', dict(eventId=saved['id'], end=moved['start']), 'invalid')
         self.assertEqual(invalid['calendar']['events'], [moved])
         absent = tool('/delete', dict(eventId='unknown'), 'absent')
@@ -169,11 +188,11 @@ class MVPTests(unittest.TestCase):
         self.assertEqual(retry['counts'], {'model': 0, 'tool': 0})
 
     def test_calendar_create_rejects_edit_id(self):
-        event = dict(title='原安排', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00')
+        event = dict(title='原安排', start='2026-11-06T21:00:00+08:00', end='2026-11-06T22:00:00+08:00')
         before = self.calendar_prompt(event, 'original')['calendar']
         saved = before['events'][0]
         # A non-overlapping mistaken create must fail, rather than silently duplicate.
-        bad = {**event, 'eventId': saved['id'], 'start': '2026-11-08T21:00:00-08:00', 'end': '2026-11-08T22:00:00-08:00'}
+        bad = {**event, 'eventId': saved['id'], 'start': '2026-11-08T21:00:00+08:00', 'end': '2026-11-08T22:00:00+08:00'}
         state = self.calendar_prompt(bad, 'mistaken-create')
         self.assertEqual(state['calendar'], before)
         result = next(m for m in reversed(state['messages']) if m['role'] == 'toolResult')
@@ -181,7 +200,7 @@ class MVPTests(unittest.TestCase):
         self.assertIn('工具失败', state['messages'][-1]['text'])
 
     def test_existing_session_refreshes_app_instructions(self):
-        before = self.calendar_prompt(dict(title='保留日程', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00'), 'keep')
+        before = self.calendar_prompt(dict(title='保留日程', start='2026-11-06T21:00:00+08:00', end='2026-11-06T22:00:00+08:00'), 'keep')
         def config(mode):
             result = subprocess.run(['node', '--input-type=module', '-', self.temp.name, mode],
                 input=(ROOT / 'verification/durable-mvp/agent_instructions.mjs').read_text(encoding='utf-8'),
@@ -201,8 +220,8 @@ class MVPTests(unittest.TestCase):
         self.assertNotIn('不支持改期', instructions)
 
     def test_calendar_update_overlap_confirmation_and_deleted_target(self):
-        a = dict(title='原安排', start='2026-11-06T21:00:00-08:00', end='2026-11-06T22:00:00-08:00')
-        b = dict(title='另一个安排', start='2026-11-07T21:00:00-08:00', end='2026-11-07T22:00:00-08:00')
+        a = dict(title='原安排', start='2026-11-06T21:00:00+08:00', end='2026-11-06T22:00:00+08:00')
+        b = dict(title='另一个安排', start='2026-11-07T21:00:00+08:00', end='2026-11-07T22:00:00+08:00')
         first = self.calendar_prompt(a, 'a')['calendar']['events'][0]
         self.calendar_prompt(b, 'b')
         self.host.prompt('/update ' + json.dumps(dict(eventId=first['id'], start=b['start'], end=b['end'])), 'overlap')
@@ -233,7 +252,7 @@ class MVPTests(unittest.TestCase):
         self.assertIn('needs_information', state['messages'][-1]['text'])
         self.assertEqual(state['calendar']['events'], [])
         event = dict(title='原会议', start='2026-11-06T15:00:00+08:00',
-                     end='2026-11-06T16:00:00+08:00', timeZone='Asia/Shanghai')
+                     end='2026-11-06T16:00:00+08:00', timeZone='Etc/GMT-8')
         for i, change in enumerate([{'end': event['start']}, {'start': '2026-02-30T15:00:00+08:00'},
                                     {'timeZone': 'Europe/Paris'}, {'start': '2026-11-06T15:00:00'}]):
             state = self.calendar_prompt({**event, **change}, f'invalid-{i}')
@@ -257,12 +276,12 @@ class MVPTests(unittest.TestCase):
         self.assertEqual(len(self.calendar_prompt(adjacent, 'adjacent-1')['calendar']['events']), 3)
 
     def test_calendar_confirmation_rechecks_new_conflicts(self):
-        event = dict(title='原安排', start='2026-11-06T14:00:00-08:00', end='2026-11-06T15:00:00-08:00')
+        event = dict(title='原安排', start='2026-11-06T14:00:00+08:00', end='2026-11-06T15:00:00+08:00')
         self.calendar_prompt(event, 'first')
-        state = self.calendar_prompt({**event, 'title': '待确认', 'start': '2026-11-06T13:00:00-08:00', 'end': '2026-11-06T17:00:00-08:00'}, 'pending')
+        state = self.calendar_prompt({**event, 'title': '待确认', 'start': '2026-11-06T13:00:00+08:00', 'end': '2026-11-06T17:00:00+08:00'}, 'pending')
         token = next(iter(state['calendar']['pending']))
-        state = self.calendar_prompt({**event, 'title': '新冲突', 'start': '2026-11-06T16:00:00-08:00', 'end': '2026-11-06T17:00:00-08:00'}, 'new')
-        self.assertEqual(state['calendar']['events'][0]['timeZone'], 'Etc/GMT+8')
+        state = self.calendar_prompt({**event, 'title': '新冲突', 'start': '2026-11-06T16:00:00+08:00', 'end': '2026-11-06T17:00:00+08:00'}, 'new')
+        self.assertEqual(state['calendar']['events'][0]['timeZone'], 'Etc/GMT-8')
         self.host.prompt('确认重叠 ' + token, 'approve-first')
         state = self.host.wait()
         self.assertEqual(len(state['calendar']['events']), 2)
@@ -288,7 +307,7 @@ class MVPTests(unittest.TestCase):
                               cwd=ROOT / 'durable_mvp', capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(seed.returncode, 0, seed.stderr)
         self.host = Host(self.temp.name)
-        state = self.calendar_prompt(dict(title='已满', start='2026-11-06T14:00:00-08:00', end='2026-11-06T15:00:00-08:00'), 'full')
+        state = self.calendar_prompt(dict(title='已满', start='2026-11-06T14:00:00+08:00', end='2026-11-06T15:00:00+08:00'), 'full')
         self.assertEqual(len(state['calendar']['events']), 200)
         self.assertEqual(state['calendar']['pending'], {})
         latest = [m for m in state['messages'] if m['role'] == 'toolResult'][-1]
