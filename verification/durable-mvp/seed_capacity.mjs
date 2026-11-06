@@ -12,6 +12,6 @@ try {
   await root.commit(async tx => {
     const doc = await tx.doc(Calendar, root.id);
     doc.events = Array.from({length: 200}, (_, i) => ({id: `fixture-${i}`, title: '容量测试',
-      start: '2026-11-06T14:00:00-08:00', end: '2026-11-06T15:00:00-08:00', timeZone: 'Etc/GMT+8'}));
+      start: '2026-11-06T14:00:00+08:00', end: '2026-11-06T15:00:00+08:00', timeZone: 'Etc/GMT-8'}));
   }, ctx);
 } finally { await harness.close(ctx); }
