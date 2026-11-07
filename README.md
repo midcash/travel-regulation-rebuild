@@ -10,12 +10,13 @@
 
 需要 Python 3.11+、Node 22.19+ 和 npm。仅支持从完整仓库源码运行；Python wheel 不包含 Node 应用和依赖。
 
-Python 命令统一在仓库自带的 `.venv` 中执行，不要使用系统 Python 或其他解释器。Windows PowerShell 可先运行 `.venv\Scripts\Activate.ps1`，再用 `python`；未激活时用 `.\.venv\Scripts\python.exe` 代替。CI 使用自己创建的环境，不依赖本机 `.venv`。
+Python 命令统一在仓库目录下的 `.venv` 中执行，不要用系统 Python 运行项目命令。`.venv` 不随仓库提交，首次检出时用系统 Python 创建一次，之后只使用 `.\.venv\Scripts\python.exe`；Windows PowerShell 也可先运行 `.venv\Scripts\Activate.ps1` 再用 `python`。CI 使用自己创建的环境，不依赖本机 `.venv`。
 
 ```powershell
-python -m pip install -e .
+python -m venv .venv   # 仅首次：用系统 Python 创建仓库虚拟环境
+.\.venv\Scripts\python.exe -m pip install -e .
 npm.cmd ci --prefix durable_mvp --ignore-scripts --no-audit --no-fund
-python -B -X utf8 -m travel_agent
+.\.venv\Scripts\python.exe -B -X utf8 -m travel_agent
 ```
 
 打开 [能力实验室](http://127.0.0.1:8765)。输入普通消息观察离线回显；`/note 一条笔记` 保存笔记，`/slow 一段内容` 执行十秒工具，`/fail` 演示工具失败。页面可创建十秒后台计时。刷新不会提交新消息；关闭服务后用相同命令重启，会话、笔记和后台任务继续保留。停止服务请在运行命令的终端按 Ctrl+C，启动器和 Node 宿主会一起退出；强制结束 Python 启动器可能留下仍在运行的 Node 宿主，此时再次启动会报 `Store is already in use`，结束占用该端口的 `node` 进程后即可重启。
@@ -23,7 +24,7 @@ python -B -X utf8 -m travel_agent
 默认数据位于新的 `.durable-mvp/offline/`，不读取或迁移旧数据库。可指定独立的新目录和端口：
 
 ```powershell
-python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
+.\.venv\Scripts\python.exe -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 ```
 
 ### 日历视图与工具
@@ -48,7 +49,7 @@ python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 在本地 `.env` 或环境变量配置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL` 和可选的 `DEEPSEEK_BASE_URL`：
 
 ```powershell
-python -B -X utf8 -m travel_agent --mode deepseek
+.\.venv\Scripts\python.exe -B -X utf8 -m travel_agent --mode deepseek
 ```
 
 仅真实模式由 Python 启动器加载 `.env`；离线模式不加载。真实模式用自然语言要求保存笔记等。锁定版 pi-ai 默认模型为 `deepseek-flash`，还支持其目录中的 `deepseek-v4-pro`。旧配置若为 `deepseek-v4-flash`，需由用户更新；启动错误会列出支持的模型，不自动猜别名或价格。自定义地址仍由 pi-ai 传输和认证。真实模式使用单独的新目录 `.durable-mvp/deepseek/`。

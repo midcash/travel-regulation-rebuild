@@ -160,6 +160,35 @@ class MVPTests(unittest.TestCase):
         self.assertEqual(len(allowed['calendar']['events']), 2)
         self.assertEqual(allowed['calendar']['events'][1]['timeZone'], 'Asia/Tokyo')
 
+    def test_prompt_clock_is_fixed_utc_plus_8(self):
+        # 16:00-24:00 UTC is already the next calendar day in UTC+8, so a UTC prompt clock would
+        # tell the model the wrong date for "today" and "tomorrow".
+        script = """
+import {nowInDefaultZone, DEFAULT_TIME_ZONE} from './calendar.mjs';
+const wallClock = ms => new Intl.DateTimeFormat('sv-SE', {timeZone: DEFAULT_TIME_ZONE, hourCycle: 'h23',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'})
+  .format(ms).replace(' ', 'T');
+const samples = ['2026-11-06T16:30:00Z', '2026-11-06T15:59:59Z', '2026-03-08T20:00:00Z'];
+console.log(JSON.stringify(samples.map(value => {
+  const ms = Date.parse(value), actual = nowInDefaultZone(ms);
+  return {value, actual, sameInstant: Date.parse(actual) === ms, wallClockMatches: actual.startsWith(wallClock(ms))};
+})));
+"""
+        result = subprocess.run(['node', '--input-type=module', '-'], input=script,
+                                cwd=ROOT / 'durable_mvp', capture_output=True, text=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = json.loads(result.stdout)
+        self.assertEqual([row['actual'][:16] for row in rows],
+                         ['2026-11-07T00:30', '2026-11-06T23:59', '2026-03-09T04:00'])
+        # Same instant as the input and the same wall clock as DEFAULT_TIME_ZONE: no drift between the
+        # hard-coded +08:00 offset and the zone constant.
+        self.assertEqual([(row['sameInstant'], row['wallClockMatches']) for row in rows],
+                         [(True, True)] * len(rows))
+        clock = [line for line in (ROOT / 'durable_mvp/server.mjs').read_text(encoding='utf-8').splitlines()
+                 if 'Current time' in line]
+        self.assertEqual(len(clock), 1)
+        self.assertIn('nowInDefaultZone()', clock[0])
+
     def test_calendar_update_delete_and_move(self):
         event = dict(title='动车', start='2026-11-06T21:00:00+08:00', end='2026-11-06T22:00:00+08:00')
         state = self.calendar_prompt(event, 'seed')

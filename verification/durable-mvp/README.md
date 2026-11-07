@@ -125,7 +125,9 @@ Codex + Ego Lite 在本轮全新临时离线库、端口 8777 通过页面创建
 
 关联业务目标：S01 的默认时区由用户于 2026-11-06 改定为固定 UTC+8。页面显示时区、日历工具默认时区、模型提示、离线示例与页面说明统一为 `Etc/GMT-8`（IANA 符号反转，+08:00，不随夏令时变化）；差旅侧时间解析原本即为 +08:00，schema 描述改为 UTC+8。仍允许用户明确指定其他时区。
 
-在仓库 `.venv` 执行 `.\.venv\Scripts\python.exe scripts/check.py`：21 项 MVP、39 项工具/启动器、22 项底层 Durable 共 82 项通过，退出码 0；四个变更 JavaScript 模块的 `node --check` 与 `git diff --check` 通过。新增 `test_calendar_default_timezone_is_fixed_utc_plus_8`：不传 timeZone 的 `+08:00` 日程保存为 `Etc/GMT-8`，`+09:00` 偏移在默认时区下被拒绝且不写入，显式 `Asia/Tokyo` 配 `+09:00` 仍可创建。原有时区夹具统一改为 `+08:00`。
+在仓库 `.venv` 执行 `.\.venv\Scripts\python.exe scripts/check.py`：22 项 MVP、39 项工具/启动器、22 项底层 Durable 共 83 项通过，退出码 0；四个变更 JavaScript 模块的 `node --check` 与 `git diff --check` 通过。新增 `test_calendar_default_timezone_is_fixed_utc_plus_8`：不传 timeZone 的 `+08:00` 日程保存为 `Etc/GMT-8`，`+09:00` 偏移在默认时区下被拒绝且不写入，显式 `Asia/Tokyo` 配 `+09:00` 仍可创建。原有时区夹具统一改为 `+08:00`。
+
+复查后修正模型提示时钟：原 `Current time` 用 UTC，16:00–24:00 UTC 会落后一个日历日，与同一段提示“未指定时区按 UTC+8”矛盾。现由 `calendar.mjs` 的 `nowInDefaultZone` 提供带 `+08:00` 的当前时间，新增 `test_prompt_clock_is_fixed_utc_plus_8`：16:30Z 显示为次日 00:30、15:59:59Z 仍为当日 23:59，并与 `Etc/GMT-8` 的墙钟一致且解析回同一时刻。根 README 的安装/启动命令改为显式 `.venv` 解释器，并补上首次创建步骤。该提示只在真实模型路径生效，本轮未调用真实模型。
 
 Codex + Ego Lite 使用本轮全新临时离线库、端口 8790 操作实际页面：
 
