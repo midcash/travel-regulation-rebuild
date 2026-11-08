@@ -10,10 +10,13 @@
 
 需要 Python 3.11+、Node 22.19+ 和 npm。仅支持从完整仓库源码运行；Python wheel 不包含 Node 应用和依赖。
 
+Python 命令统一在仓库目录下的 `.venv` 中执行，不要用系统 Python 运行项目命令。`.venv` 不随仓库提交，首次检出时用系统 Python 创建一次，之后只使用 `.\.venv\Scripts\python.exe`；Windows PowerShell 也可先运行 `.venv\Scripts\Activate.ps1` 再用 `python`。CI 使用自己创建的环境，不依赖本机 `.venv`。
+
 ```powershell
-python -m pip install -e .
+python -m venv .venv   # 仅首次：用系统 Python 创建仓库虚拟环境
+.\.venv\Scripts\python.exe -m pip install -e .
 npm.cmd ci --prefix durable_mvp --ignore-scripts --no-audit --no-fund
-python -B -X utf8 -m travel_agent
+.\.venv\Scripts\python.exe -B -X utf8 -m travel_agent
 ```
 
 打开 [能力实验室](http://127.0.0.1:8765)。输入普通消息观察离线回显；`/note 一条笔记` 保存笔记，`/slow 一段内容` 执行十秒工具，`/fail` 演示工具失败。页面可创建十秒后台计时。刷新不会提交新消息；关闭服务后用相同命令重启，会话、笔记和后台任务继续保留。停止服务请在运行命令的终端按 Ctrl+C，启动器和 Node 宿主会一起退出；强制结束 Python 启动器可能留下仍在运行的 Node 宿主，此时再次启动会报 `Store is already in use`，结束占用该端口的 `node` 进程后即可重启。
@@ -21,21 +24,21 @@ python -B -X utf8 -m travel_agent
 默认数据位于新的 `.durable-mvp/offline/`，不读取或迁移旧数据库。可指定独立的新目录和端口：
 
 ```powershell
-python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
+.\.venv\Scripts\python.exe -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 ```
 
 ### 日历视图与工具
 
-页面使用本地安装的 FullCalendar 6.1.20（MIT），支持月、周、日视图；显式加载中文语言包，显示时区固定为 UTC−8（Etc/GMT+8，−08:00，不随夏令时变化）。点击事件查看完整起止时间。四个原生工具为 `list_calendar_events`、`create_calendar_event`、`update_calendar_event` 和 `delete_calendar_event`，与页面 HTTP 查询共用 Durable 文档及 `session.sqlite`，不另建数据库、不迁移旧数据。
+项目统一采用固定 UTC+8（IANA `Etc/GMT-8`，+08:00，不随夏令时变化）：页面显示时区、日历工具默认时区、模型提示与离线示例一致，差旅侧的时间解析同样按 +08:00。页面使用本地安装的 FullCalendar 6.1.20（MIT），支持月、周、日视图；显式加载中文语言包。点击事件查看完整起止时间。四个原生工具为 `list_calendar_events`、`create_calendar_event`、`update_calendar_event` 和 `delete_calendar_event`，与页面 HTTP 查询共用 Durable 文档及 `session.sqlite`，不另建数据库、不迁移旧数据。
 
 离线模式示例（仅合成模型指令，不代表自然语言理解）：
 
 ```text
-/calendar {"title":"项目评审","start":"2026-11-06T15:00:00+08:00","end":"2026-11-06T16:00:00+08:00","timeZone":"Asia/Shanghai"}
+/calendar {"title":"项目评审","start":"2026-11-06T15:00:00+08:00","end":"2026-11-06T16:00:00+08:00","timeZone":"Etc/GMT-8"}
 /events {"start":"2026-11-06T00:00:00+08:00","end":"2026-11-07T00:00:00+08:00"}
 ```
 
-真实模式使用自然语言。缺少标题、日期或开始/结束时间时先追问；未另行指定时区时采用已确认的 UTC−8，不默认补时长。工具校验时间与 IANA 时区一致，按半开区间判断重叠；重叠时保存候选并展示确认按钮并列出冲突，用户点击后通过会话提交 `确认重叠 <标识>`，服务端记录授权，工具重新核对当前冲突；出现未展示的新冲突时更新清单并要求再次确认，否则才创建。支持通过会话按查询所得 ID 修改和删除日程；修改保留未指定字段，改期保留原 ID，重叠时确认后才替换原安排。匹配不唯一时先追问。暂不支持全天、重复日程或提醒。
+真实模式使用自然语言。缺少标题、日期或开始/结束时间时先追问；未另行指定时区时采用已确认的 UTC+8，不默认补时长。工具校验时间与 IANA 时区一致，按半开区间判断重叠；重叠时保存候选并展示确认按钮并列出冲突，用户点击后通过会话提交 `确认重叠 <标识>`，服务端记录授权，工具重新核对当前冲突；出现未展示的新冲突时更新清单并要求再次确认，否则才创建。支持通过会话按查询所得 ID 修改和删除日程；修改保留未指定字段，改期保留原 ID，重叠时确认后才替换原安排。匹配不唯一时先追问。暂不支持全天、重复日程或提醒。
 
 离线可用 `/update {"eventId":"查询返回的 ID","title":"航班"}` 和 `/delete {"eventId":"查询返回的 ID"}` 验证工具；自然语言及多工具自主组合需使用真实模型，离线命令不代表语言理解验收。
 
@@ -46,7 +49,7 @@ python -B -X utf8 -m travel_agent --data C:/path/to/new-mvp-store --port 8765
 在本地 `.env` 或环境变量配置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL` 和可选的 `DEEPSEEK_BASE_URL`：
 
 ```powershell
-python -B -X utf8 -m travel_agent --mode deepseek
+.\.venv\Scripts\python.exe -B -X utf8 -m travel_agent --mode deepseek
 ```
 
 仅真实模式由 Python 启动器加载 `.env`；离线模式不加载。真实模式用自然语言要求保存笔记等。锁定版 pi-ai 默认模型为 `deepseek-flash`，还支持其目录中的 `deepseek-v4-pro`。旧配置若为 `deepseek-v4-flash`，需由用户更新；启动错误会列出支持的模型，不自动猜别名或价格。自定义地址仍由 pi-ai 传输和认证。真实模式使用单独的新目录 `.durable-mvp/deepseek/`。
@@ -74,10 +77,10 @@ Pi Durable、pi-ai 和 chord 精确锁定 1.4.0；Durable 是实验性 API。只
 
 ```powershell
 npm.cmd ci --prefix verification/durable-step0 --ignore-scripts --no-audit --no-fund
-python scripts/check.py
+.\.venv\Scripts\python.exe scripts/check.py
 ```
 
-Windows 需允许探针强杀自己启动的 Node 子进程。检查不加载 `.env`，不产生模型或供应商费用。CI 在 PR 和 main 推送时运行，已增加 MVP 依赖安装；远端结果另行核实。
+激活虚拟环境后等价于 `python scripts/check.py`。Windows 需允许探针强杀自己启动的 Node 子进程。检查不加载 `.env`，不产生模型或供应商费用。CI 在 PR 和 main 推送时运行，已增加 MVP 依赖安装；远端结果另行核实。
 
 ## 保留的业务资产与数据
 

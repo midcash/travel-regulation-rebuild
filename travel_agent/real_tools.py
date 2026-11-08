@@ -20,7 +20,7 @@ def function(name, description, properties, required=()):
 REAL_SCHEMAS = [function("search_transport", "搜索真实航班或火车；返回供应商时刻、请求约束检查及证据，不代表完整方案。", {
     "mode": {"type": "string", "enum": ["flight", "train"]},
     "origin": {"type": "string"}, "destination": {"type": "string"},
-    "departure_date": {"type": "string", "description": "YYYY-MM-DD, Asia/Shanghai"},
+    "departure_date": {"type": "string", "description": "YYYY-MM-DD, UTC+8"},
     "service_class": {"type": "string", "enum": ["any", "high_speed_rail"]},
     "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
     ["mode", "origin", "destination", "departure_date"]), function("get_transport_detail", "查询本次已观察交通候选的机场、航站楼及席别报价；只传 candidate_id，不改写原候选条件。", {

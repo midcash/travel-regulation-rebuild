@@ -2,11 +2,15 @@
 
 安装、启动、能力和限制以根 [README](../../README.md) 为准。本入口维护验收方式与本轮观察，不替代差旅 B01–B12。
 
+2026-11-06 起项目默认时区改为固定 UTC+8（见 `docs/product-behavior.md` S01）。下方 2026-11-05 / 11-06 的历史观察段落保留当时的 UTC−8 配置与结果，不作为当前默认时区的证明；当前范围以文末增量为准。历史段落只保留检查结果，不把当时的本机解释器路径当作当前用法；本项目统一使用仓库 `.venv`。
+
 ## 离线进程检查
 
+在仓库 `.venv` 中执行（激活后 `python` 等价）：
+
 ```powershell
-python -B -X utf8 -m unittest discover -s verification/durable-mvp -v
-python scripts/check.py
+.\.venv\Scripts\python.exe -B -X utf8 -m unittest discover -s verification/durable-mvp -v
+.\.venv\Scripts\python.exe scripts/check.py
 ```
 
 [test_mvp.py](test_mvp.py) 使用真实 HTTP、Node、Pi Durable 和 SQLite。每项新建临时目录，只在自身重启间复用；子进程不继承模型凭证，离线宿主拒绝外连。替身只在 pi-ai 模型边界。
@@ -88,7 +92,7 @@ Codex + Ego Lite 使用本轮全新临时离线库与端口 8776，通过页面�
 
 首次 `python scripts/check.py` 的 18 项 MVP、39 项工具/启动器通过，底层探针因沙箱拒绝 taskkill 失败。真实 DeepSeek 自然语言、歧义追问、多日程自主工具组合未运行，不计为通过。用户验收、CI 和合并未执行。
 
-随后在允许控制测试子进程的环境执行 `D:/anaconda/python.exe scripts/check.py`，18 项 MVP、39 项工具/启动器及 22 项底层检查全部通过，退出码 0。补充目标删除的断言后，单独复验两项 calendar_update 检查通过；三个变更模块的 Node 语法检查通过。离线工具与页面范围 Agent 验收通过；完整自然语言目标尚未完成真实模型验收。
+随后在允许控制测试子进程的环境执行完整 `scripts/check.py`，18 项 MVP、39 项工具/启动器及 22 项底层检查全部通过，退出码 0。补充目标删除的断言后，单独复验两项 calendar_update 检查通过；三个变更模块的 Node 语法检查通过。离线工具与页面范围 Agent 验收通过；完整自然语言目标尚未完成真实模型验收。
 
 ## PR #59 Cubic 复核（2026-11-06）
 
@@ -98,7 +102,7 @@ Codex + Ego Lite 使用本轮全新临时离线库与端口 8776，通过页面�
 
 Codex + Ego Lite 在本轮全新临时离线库、端口 8777 通过页面创建“原动车”和次日“已有会议”，请求将原动车改为次日同时间“航班”。确认前原日程未变，面板显示“尚未修改。确认后将替换原日程，保留其他已有日程。”及“确认修改”；点击后 HTTP 核对同 ID、标题和精确 21–22 时新起止时间，另一日程不变。再新增重叠安排，面板切换“尚未创建”“确认创建”。笔记与数据页可见 /update、/delete 和新的能力提示。本机脚本和数据不提交。
 
-最终版本执行 `D:/anaconda/python.exe scripts/check.py`，20 项 MVP、39 项工具/启动器、22 项底层检查共 81 项通过，退出码 0；四个变更 JavaScript 模块的 `node --check`、`git diff --check` 通过。离线工具与页面范围 Agent 验收通过。真实模型自然语言与自主工具组合仍未运行，不计为通过；用户验收、远端 CI 和合并另行核实。Ego Lite 提示可用更新，本次未升级。
+最终版本执行完整 `scripts/check.py`，20 项 MVP、39 项工具/启动器、22 项底层检查共 81 项通过，退出码 0；四个变更 JavaScript 模块的 `node --check`、`git diff --check` 通过。离线工具与页面范围 Agent 验收通过。真实模型自然语言与自主工具组合仍未运行，不计为通过；用户验收、远端 CI 和合并另行核实。Ego Lite 提示可用更新，本次未升级。
 
 ## PR #54 历史浏览器观察
 
@@ -116,3 +120,21 @@ Codex + Ego Lite 在本轮全新临时离线库、端口 8777 通过页面创建
 8. 强杀宿主后用同一数据目录重启，页面保留笔记和 6 条消息，新进程计数 (0, 0)；启动 15 秒后第二个宿主仍被拒绝（`Store is already in use`）。
 
 以上仅证明合成模型下的闭环。真实 DeepSeek 网络、语言理解、自定义模型地址、供应商、生产预算和 MCP 未验收，不计为通过。截图及临时库不提交。
+
+## 固定 UTC+8 增量（2026-11-06）
+
+关联业务目标：S01 的默认时区由用户于 2026-11-06 改定为固定 UTC+8。页面显示时区、日历工具默认时区、模型提示、离线示例与页面说明统一为 `Etc/GMT-8`（IANA 符号反转，+08:00，不随夏令时变化）；差旅侧时间解析原本即为 +08:00，schema 描述改为 UTC+8。仍允许用户明确指定其他时区。
+
+在仓库 `.venv` 执行 `.\.venv\Scripts\python.exe scripts/check.py`：22 项 MVP、39 项工具/启动器、22 项底层 Durable 共 83 项通过，退出码 0；四个变更 JavaScript 模块的 `node --check` 与 `git diff --check` 通过。新增 `test_calendar_default_timezone_is_fixed_utc_plus_8`：不传 timeZone 的 `+08:00` 日程保存为 `Etc/GMT-8`，`+09:00` 偏移在默认时区下被拒绝且不写入，显式 `Asia/Tokyo` 配 `+09:00` 仍可创建。原有时区夹具统一改为 `+08:00`。
+
+复查后修正模型提示时钟：原 `Current time` 用 UTC，16:00–24:00 UTC 会落后一个日历日，与同一段提示“未指定时区按 UTC+8”矛盾。现由 `calendar.mjs` 的 `nowInDefaultZone` 提供带 `+08:00` 的当前时间，新增 `test_prompt_clock_is_fixed_utc_plus_8`：16:30Z 显示为次日 00:30、15:59:59Z 仍为当日 23:59，并与 `Etc/GMT-8` 的墙钟一致且解析回同一时刻。根 README 的安装/启动命令改为显式 `.venv` 解释器，并补上首次创建步骤。该提示只在真实模型路径生效，本轮未调用真实模型。
+
+Codex + Ego Lite 使用本轮全新临时离线库、端口 8790 操作实际页面：
+
+1. 页面显示「显示时区：UTC+8（固定 +08:00）」，输入框提示与笔记页命令说明均为 UTC+8；`displayZone` 与 FullCalendar `timeZone` 均为 `Etc/GMT-8`。
+2. 通过输入框发送不带 timeZone 的 `/calendar {"title":"UTC+8验收","start":"2026-11-06T15:00:00+08:00","end":"2026-11-06T16:00:00+08:00"}`，HTTP `/state` 中事件 `timeZone` 为 `Etc/GMT-8`；月历显示「15时UTC+8验收」，`startStr` 为 `2026-11-06T15:00:00+08:00`；点击详情为「2026年11月6日 15:00 — 2026年11月6日 16:00（UTC+8）」。
+3. 请求 15:30–16:30 重叠日程，确认前仍只有一条，待确认卡片时间含（UTC+8）；点击「确认创建」后两条日程均为 `Etc/GMT-8`。
+4. 用 CDP 将浏览器时区改为 `America/New_York` 并刷新：`Intl` 解析为 America/New_York，但显示时区文案、`formatTime`/`formatClock`（01:00Z → 09:00）、事件文案 15时 / 15:30 与 `startStr` 均为 UTC+8；详情仍为（UTC+8）。在该时区下新建十秒计时，浏览器本地时钟为 06:52，页面显示「等待到期 · 19:52」，与 UTC+8 一致。
+5. 截图因 Ego Lite 窗口最小化未能捕获；页面事实以上述 DOM、`/state` 断言和可见文案为准，截图不作为通过项。本机临时库和脚本不提交。
+
+本增量的离线工具与页面范围 Agent 验收通过。真实 DeepSeek 自然语言、用户验收、远端 CI 与合并未执行，不计为通过。

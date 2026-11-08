@@ -8,6 +8,13 @@ const Updated = defineEntry('mvp.calendar-updated');
 const Deleted = defineEntry('mvp.calendar-deleted');
 const Created = defineEntry('mvp.calendar-created');
 const output = value => ({output: [{type: 'text', text: JSON.stringify(value)}]});
+// IANA's Etc/GMT sign is reversed: Etc/GMT-8 is the fixed UTC+8 used across the project.
+export const DEFAULT_TIME_ZONE = 'Etc/GMT-8';
+// Prompts resolve relative dates in DEFAULT_TIME_ZONE, so "now" must carry the same fixed +08:00 offset:
+// a UTC timestamp would name the previous calendar date between 16:00 and 24:00 UTC.
+export function nowInDefaultZone(ms = Date.now()) {
+  return new Date(ms + 8 * 3600 * 1000).toISOString().replace('Z', '+08:00');
+}
 // Require explicit offsets; reject invalid dates instead of silently normalizing them.
 export function instant(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(value)) throw new Error('请提供含时区偏移的完整日期时间');
@@ -27,7 +34,7 @@ export function inRange(events, start, end) {
 }
 export function calendarTools(event) {
   const write = (updating = false) => defineTool({name: updating ? 'update_calendar_event' : 'create_calendar_event',
-    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events; omitted fields retain saved values. Never create a replacement event for an edit.' : 'Create ONE NEW event; never use this tool to edit a saved event or pass eventId.') + ' Provide title, start, end (explicit offsets) for creation; optional IANA timeZone defaults to Etc/GMT+8 (fixed UTC-8). Ask for missing creation fields. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence/reminders.',
+    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events; omitted fields retain saved values. Never create a replacement event for an edit.' : 'Create ONE NEW event; never use this tool to edit a saved event or pass eventId.') + ` Provide title, start, end (explicit offsets) for creation; optional IANA timeZone defaults to ${DEFAULT_TIME_ZONE} (fixed UTC+8). Ask for missing creation fields. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence/reminders.`,
     parameters: Type.Object({...(updating ? {eventId: Type.Optional(Type.String())} : {}), title: Type.Optional(Type.String({maxLength: 200})), start: Type.Optional(Type.String()),
       end: Type.Optional(Type.String()), timeZone: Type.Optional(Type.String()), confirmationId: Type.Optional(Type.String())}), replay: 'safe',
     execute: async (input, api, context) => {
@@ -71,7 +78,7 @@ export function calendarTools(event) {
             return output(result);
           }
         } else {
-          input = {...original, ...input, timeZone: input.timeZone || original?.timeZone || 'Etc/GMT+8'};
+          input = {...original, ...input, timeZone: input.timeZone || original?.timeZone || DEFAULT_TIME_ZONE};
           const missing = ['title', 'start', 'end'].filter(key => !input[key]?.trim());
           if (missing.length) return output({status: 'needs_information', missing, message: '请向用户追问缺少的信息'});
           range(input.start, input.end);

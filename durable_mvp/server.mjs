@@ -16,7 +16,7 @@ import {fauxProvider, fauxAssistantMessage, fauxToolCall} from '@earendil-works/
 import {Harness, createRegistry, defineDoc, defineEntry, defineExtension, defineTool, defineTask, section}
   from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {Calendar, calendarTools, inRange} from './calendar.mjs';
+import {Calendar, DEFAULT_TIME_ZONE, calendarTools, inRange, nowInDefaultZone} from './calendar.mjs';
 
 const {values: options} = parseArgs({options: {
   mode: {type: 'string', default: 'offline'}, data: {type: 'string'},
@@ -100,7 +100,7 @@ const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, sl
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  }), section('calendar-clock', async () => `Current time: ${new Date().toISOString()}. Default calendar timezone is fixed UTC-8 (Etc/GMT+8, offset -08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
+  }), section('calendar-clock', async () => `Current time (UTC+8): ${nowInDefaultZone()}. Default calendar timezone is fixed UTC+8 (${DEFAULT_TIME_ZONE}, offset +08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
 const models = createModels();
 let model;
 if (offline) {
