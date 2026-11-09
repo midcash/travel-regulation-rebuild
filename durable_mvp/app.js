@@ -171,6 +171,48 @@ function draw(state) {
     li.textContent = timer.state?.status === 'terminal' ? '计时完成' : '等待到期 · ' + formatClock(timer.until);
     return li;
   }));
+  // Page-delivery channel for reminders: render scheduled/delivered reminders and
+  // toast once when a reminder transitions to 'delivered'. The committed state
+  // is the source of truth, so even if a system notification failed the user
+  // still sees the reminder here.
+  const reminders = state.reminders ?? [];
+  if ($('reminders')) {
+    $('reminders').replaceChildren(...reminders.map(r => {
+      const li = document.createElement('li');
+      const when = formatTime(r.start);
+      li.textContent = (r.status === 'delivered' ? '已提醒 · ' : '待提醒 · ') + (r.title || '日程') + ' · ' + when;
+      return li;
+    }));
+  }
+  for (const r of reminders) {
+    const key = r.eventId + '@' + (r.remindAt ?? '');
+    if (r.status === 'delivered' && !shownReminders.has(key)) {
+      shownReminders.add(key);
+      showReminderToast(r);
+    }
+  }
+}
+const shownReminders = new Set();
+function showReminderToast(r) {
+  const host = $('reminder-toast');
+  if (!host) return;
+  const card = document.createElement('div');
+  card.className = 'reminder-toast-item';
+  card.setAttribute('role', 'status');
+  card.textContent = '日程提醒：' + (r.title || '日程') + ' 将于 ' + formatTime(r.start) + ' 开始';
+  const close = document.createElement('button');
+  close.textContent = '知道了';
+  close.onclick = () => card.remove();
+  card.append(close);
+  host.append(card);
+  // Best-effort system notification (browser); failure is silent and the page
+  // channel above already delivered. Never blocks the page channel.
+  try {
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') new Notification('日程提醒', {body: card.textContent});
+      else if (Notification.permission !== 'denied') Notification.requestPermission();
+    }
+  } catch (_) { /* system channel is best-effort; page channel already shown */ }
 }
 async function refresh() {
   const id = ++refreshId;

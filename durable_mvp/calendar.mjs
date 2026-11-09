@@ -32,11 +32,36 @@ export function inRange(events, start, end) {
   const [a, b] = range(start, end);
   return events.filter(e => Date.parse(e.start) < b && Date.parse(e.end) > a);
 }
-export function calendarTools(event) {
+export function calendarTools(event, reminders) {
+  // reminders (optional): {doc, RemindersToken, task, plan(now,event,existing)->record|null, advanceMinutes, now()}
+  // When absent, calendar behaves exactly as before (no reminder scheduling).
+  const schedule = async (tx, conversationId, savedEvent, advanceOverride) => {
+    if (!reminders) return null;
+    const doc = await tx.doc(reminders.RemindersToken, conversationId);
+    const prior = doc.items[savedEvent.id];
+    const now = reminders.now();
+    const advance = Number.isFinite(advanceOverride) ? advanceOverride : reminders.advanceMinutes;
+    const record = reminders.plan(savedEvent, advance, now, prior);
+    if (!record) {
+      // No (future) reminder applies; drop any prior scheduled reminder.
+      if (prior) { prior.status = 'cancelled'; }
+      return null;
+    }
+    doc.items[savedEvent.id] = record;
+    await tx.createTask(reminders.task, {eventId: savedEvent.id, remindAt: record.remindAt,
+      taskId: record.taskId, conversationId}, {ownership: {kind: 'conversation'}, background: true});
+    return record;
+  };
+  const cancel = async (tx, conversationId, eventId) => {
+    if (!reminders) return;
+    const doc = await tx.doc(reminders.RemindersToken, conversationId);
+    if (doc.items[eventId]) doc.items[eventId].status = 'cancelled';
+  };
   const write = (updating = false) => defineTool({name: updating ? 'update_calendar_event' : 'create_calendar_event',
-    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events; omitted fields retain saved values. Never create a replacement event for an edit.' : 'Create ONE NEW event; never use this tool to edit a saved event or pass eventId.') + ` Provide title, start, end (explicit offsets) for creation; optional IANA timeZone defaults to ${DEFAULT_TIME_ZONE} (fixed UTC+8). Ask for missing creation fields. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence/reminders.`,
+    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events; omitted fields retain saved values. Never create a replacement event for an edit.' : 'Create ONE NEW event; never use this tool to edit a saved event or pass eventId.') + ` Provide title, start, end (explicit offsets) for creation; optional IANA timeZone defaults to ${DEFAULT_TIME_ZONE} (fixed UTC+8). Optional advanceMinutes sets the reminder lead time before start (default ${reminders ? reminders.advanceMinutes : 10}); when the user states an explicit lead time, use it. Ask for missing creation fields. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence.`,
     parameters: Type.Object({...(updating ? {eventId: Type.Optional(Type.String())} : {}), title: Type.Optional(Type.String({maxLength: 200})), start: Type.Optional(Type.String()),
-      end: Type.Optional(Type.String()), timeZone: Type.Optional(Type.String()), confirmationId: Type.Optional(Type.String())}), replay: 'safe',
+      end: Type.Optional(Type.String()), timeZone: Type.Optional(Type.String()), advanceMinutes: Type.Optional(Type.Number()),
+      confirmationId: Type.Optional(Type.String())}), replay: 'safe',
     execute: async (input, api, context) => {
       event('tool');
       if (!updating && Object.hasOwn(input, 'eventId')) throw new Error('创建工具不接受 eventId；修改请使用 update_calendar_event');
@@ -99,7 +124,13 @@ export function calendarTools(event) {
         if (!updateId && doc.events.length >= 200) throw new Error('MVP 日程上限为 200 条');
         if (updateId) doc.events.splice(doc.events.findIndex(e => e.id === updateId), 1, candidate);
         else doc.events.push(candidate);
-        const result = {status: updateId ? 'updated' : 'created', event: candidate};
+        // Schedule (or reschedule) the start-before reminder in this same
+        // transaction. A stale task for the prior time self-skips on wake since
+        // its taskId no longer matches the stored record.
+        const advance = Number.isFinite(input.advanceMinutes) ? input.advanceMinutes : undefined;
+        const reminder = await schedule(tx, api.conversationId, candidate, advance);
+        const result = {status: updateId ? 'updated' : 'created', event: candidate,
+          reminder: reminder ? {remindAt: reminder.remindAt, advanceMinutes: reminder.advanceMinutes} : null};
         doc.operations[api.callId] = result;
         if (pending) pending.result = result;
         await tx.appendEntry(updateId ? Updated : Created, api.conversationId, {data: candidate});
@@ -123,7 +154,10 @@ export function calendarTools(event) {
         const index = doc.events.findIndex(e => e.id === eventId);
         const result = index < 0 ? {status: 'not_found', eventId} : {status: 'deleted', event: doc.events.splice(index, 1)[0]};
         doc.operations[api.callId] = result;
-        if (index >= 0) await tx.appendEntry(Deleted, api.conversationId, {data: result.event});
+        if (index >= 0) {
+          await cancel(tx, api.conversationId, eventId);
+          await tx.appendEntry(Deleted, api.conversationId, {data: result.event});
+        }
         return output(result);
       }, context);
     }})];

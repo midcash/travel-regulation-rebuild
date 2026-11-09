@@ -17,10 +17,16 @@ import {Harness, createRegistry, defineDoc, defineEntry, defineExtension, define
   from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
 import {Calendar, DEFAULT_TIME_ZONE, calendarTools, inRange, nowInDefaultZone} from './calendar.mjs';
+import {Reminders, ReminderFired, makeReminderTask, planReminder, DEFAULT_ADVANCE_MINUTES} from './reminders.mjs';
 
 const {values: options} = parseArgs({options: {
   mode: {type: 'string', default: 'offline'}, data: {type: 'string'},
   port: {type: 'string', default: '8765'},
+  // TEST-ONLY clock seam. When provided, the Harness clock reads the epoch (ms)
+  // from this file instead of Date.now(), so reminder timing can be driven
+  // deterministically in tests. Production never passes this flag; the default
+  // is Date.now(). Keep it isolated here and do not reuse it in product paths.
+  'now-file': {type: 'string'},
 }});
 if (!['offline', 'deepseek'].includes(options.mode)) throw new Error('mode must be offline or deepseek');
 const port = Number(options.port);
@@ -96,11 +102,17 @@ const slow = defineTool({name: 'slow_echo', description: 'Wait ten seconds then 
   }});
 const fail = defineTool({name: 'fail_demo', description: 'Deliberately fail to demonstrate error handling.',
   parameters: Type.Object({}), replay: 'safe', execute: async () => { event('tool'); throw new Error('演示工具失败'); }});
-const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, slow, fail, ...calendarTools(event)],
+const Reminder = makeReminderTask(Reminders);
+// The reminder bundle handed to calendar tools: they write/plan the Reminders
+// document and create the reminder task inside their own transaction. `now`
+// reads the committed Harness clock so timing matches the scheduler exactly.
+const reminders = {RemindersToken: Reminders, task: Reminder, advanceMinutes: DEFAULT_ADVANCE_MINUTES,
+  now: () => clockNow(), plan: planReminder};
+const extension = defineExtension({name: 'mvp', tasks: [Timer, Reminder], tools: [tool, slow, fail, ...calendarTools(event, reminders)],
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  }), section('calendar-clock', async () => `Current time (UTC+8): ${nowInDefaultZone()}. Default calendar timezone is fixed UTC+8 (${DEFAULT_TIME_ZONE}, offset +08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
+  }), section('calendar-clock', async () => `Current time (UTC+8): ${nowInDefaultZone()}. Default calendar timezone is fixed UTC+8 (${DEFAULT_TIME_ZONE}, offset +08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. When creating/updating an event, a reminder is scheduled before it starts (default ${DEFAULT_ADVANCE_MINUTES} minutes); if the user states an explicit lead time, pass it as advanceMinutes. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
 const models = createModels();
 let model;
 if (offline) {
@@ -140,10 +152,17 @@ models.streamSimple = (...args) => { event('model'); return stream(...args); };
 const registry = createRegistry();
 registry.install(extension);
 const storage = await openNodeSqliteStorage(path.join(folder, 'session.sqlite'));
-const harness = await Harness.open(storage, {models, registry,
+// TEST-ONLY: --now-file drives the Harness clock for deterministic reminder
+// tests. Production leaves it unset and the clock stays Date.now (the default).
+// One clock function is shared by the Harness scheduler and the reminder bundle
+// so business-time and scheduler-time never diverge.
+const clockNow = options['now-file']
+  ? () => Number(fs.readFileSync(options['now-file'], 'utf8').trim())
+  : Date.now;
+const harness = await Harness.open(storage, {models, registry, now: clockNow,
   settings: {retry: {maxRetries: 0}, toolExecution: 'sequential'},
   onReport: () => console.error('Durable reported a runtime error; inspect state before continuing.')}, ctx);
-const instructions = '你是个人日程能力验证助手。用中文回答。支持读取、新增、修改、改期和删除单次定时日程。修改或删除前先查询并使用已有日程 ID，匹配不唯一先追问；修改保留未指定字段，改期保留时长，优先直接修改而非先删后建。新增信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持重复日程、提醒或差旅查询。';
+const instructions = '你是个人日程能力验证助手。用中文回答。支持读取、新增、修改、改期和删除单次定时日程，并可设定日程开始前提醒（默认提前 10 分钟，用户明确说出提前量时以用户为准）。修改或删除前先查询并使用已有日程 ID，匹配不唯一先追问；修改保留未指定字段，改期保留时长，优先直接修改而非先删后建。新增信息不足先追问，不擅自补全时间或时长。重叠必须寻求用户确认，提示使用页面确认按钮。只声称工具已成功执行的结果。不支持重复日程或差旅查询。';
 const root = await harness.root(ctx, {agent: {model, extensions: [extension], thinkingLevel: 'off', instructions}});
 const existing = await root.agent(ctx);
 if (existing.model?.provider !== model.provider || existing.model?.modelId !== model.modelId)
@@ -168,8 +187,14 @@ async function state() {
   const inspection = await harness.inspect(ctx);
   const timerDoc = await harness.snapshot(Timers, root.id, ctx);
   const timers = await Promise.all((timerDoc?.items ?? []).map(async item => ({...item, state: (await harness.getTask(item.id, ctx))?.state})));
+  const reminderDoc = await harness.snapshot(Reminders, root.id, ctx);
+  const reminders = Object.values(reminderDoc?.items ?? {}).map(item => {
+    // Page channel: 'delivered' means the reminder should surface to the user.
+    const {taskId, ...view} = item;
+    return view;
+  });
   return {conversationId: root.id, mode: options.mode, model, messages,
-    note: (await harness.snapshot(Notebook, root.id, ctx))?.text ?? '', timers,
+    note: (await harness.snapshot(Notebook, root.id, ctx))?.text ?? '', timers, reminders,
     calendar: (await harness.snapshot(Calendar, root.id, ctx)) ?? {events: [], pending: {}},
     busy: inspection.tasks.some(t => !t.record.background) || inspection.submissions.length > 0, counts, fatal};
 }

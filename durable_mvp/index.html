@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>对话 · Pi Durable</title><link rel="stylesheet" href="/style.css"><script src="/fullcalendar.js" defer></script><script src="/calendar-zh-cn.js" defer></script><script src="/luxon.js" defer></script><script src="/calendar-zone.js" defer></script><script src="/app.js" defer></script></head>
 <body>
+<div id="reminder-toast" class="reminder-toast" aria-live="polite"></div>
 <div class="app schedule-open" id="app">
   <aside class="rail" aria-label="主导航">
     <div class="brand"><span class="mark" aria-hidden="true">π</span><div class="brand-text"><strong>Pi Durable</strong><span>个人日程助手</span></div></div>
@@ -32,6 +33,7 @@
       <div class="notes-scroll"><div class="notes-grid">
         <section class="panel"><h2>持久化笔记</h2><p id="note" class="note-body">暂无笔记</p><p class="hint">由 save_note 工具写入，随会话保存。</p></section>
         <section class="panel"><h2>后台计时</h2><p class="hint">创建十秒任务，在服务重启后继续。取消对话不会取消后台任务。</p><button id="timer">创建十秒计时</button><ul id="timers"></ul></section>
+        <section class="panel"><h2>日程提醒</h2><p class="hint">日程开始前默认提前 10 分钟提醒（会话中可指定提前量）。提醒跨重启保留。</p><ul id="reminders"></ul></section>
         <section class="panel"><h2>试试能力边界</h2><dl><dt>/note 内容</dt><dd>调用工具保存笔记</dd><dt>/calendar JSON</dt><dd>新增日程，字段 title、start、end、timeZone；默认固定 UTC+8（+08:00），时间含时区偏移，例如 2026-11-06T15:00:00+08:00。</dd><dt>/events JSON</dt><dd>按 start、end 查询日程</dd><dt>/update JSON</dt><dd>修改已有日程，eventId 为查询返回的 ID；仅传入要修改的 title、start、end、timeZone 字段。</dd><dt>/delete JSON</dt><dd>删除已有日程，传入 eventId。</dd><dt>/slow 内容</dt><dd>十秒工具，可取消或重启恢复</dd><dt>/fail</dt><dd>观察工具失败及后续对话</dd></dl><p class="hint">以上命令仅适用于离线演示。真实模型模式请用自然语言。支持读取、新增、修改、改期和删除单次定时日程。</p></section>
         <section class="panel meta"><h2>运行信息</h2><p id="identity"></p><p id="counts"></p><p class="hint">单用户、单会话。此 MVP 尚未连接 MCP 或差旅供应商。</p></section>
       </div></div>
