@@ -153,6 +153,71 @@ class DocsCheck(unittest.TestCase):
         self.assertFalse(check._specifier_is_travel_agent("my_travel_agent"))
         self.assertFalse(check._specifier_is_travel_agent("travel_agent_utils"))
 
+    # --- cubic K13M: comments / template literals must not cause false ----
+    def test_block_comment_import_is_not_false_positive(self):
+        self._write("README.md", "# fake\n")
+        self._write("durable_mvp/calendar.mjs", "export {}\n")
+        self._write(
+            "durable_mvp/server.mjs",
+            "/* import x from './travel_agent/leak.mjs' */\n"
+            "import './calendar.mjs';\n",
+        )
+        self.assertEqual(self._problems(), [])
+
+    def test_template_literal_import_is_not_false_positive(self):
+        self._write("README.md", "# fake\n")
+        self._write("durable_mvp/calendar.mjs", "export {}\n")
+        self._write(
+            "durable_mvp/server.mjs",
+            "const s = `\nimport y from '../travel_agent/leak.mjs'\n`;\n"
+            "import './calendar.mjs';\n",
+        )
+        self.assertEqual(self._problems(), [])
+
+    def test_line_comment_import_is_not_false_positive(self):
+        self._write("README.md", "# fake\n")
+        self._write("durable_mvp/calendar.mjs", "export {}\n")
+        self._write(
+            "durable_mvp/server.mjs",
+            "// import z from './travel_agent/leak.mjs'\nimport './calendar.mjs';\n",
+        )
+        self.assertEqual(self._problems(), [])
+
+    # Reverse case (boundary officer): stripping comments must NOT hide a real
+    # import that sits right next to / after a comment.
+    def test_real_import_after_comment_is_still_detected(self):
+        self._write("README.md", "# fake\n")
+        self._write("durable_mvp/calendar.mjs", "export {}\n")
+        self._write(
+            "durable_mvp/server.mjs",
+            "/* a leading block comment */\n"
+            "import x from '../travel_agent/leak.mjs'; // trailing comment\n",
+        )
+        problems = self._problems()
+        self.assertTrue(any("travel_agent" in p for p in problems), problems)
+
+    # --- cubic K13S: export ... from is a static dependency --------------
+    def test_export_from_travel_agent_is_detected(self):
+        self._write("README.md", "# fake\n")
+        self._write("durable_mvp/calendar.mjs", "export {}\n")
+        self._write(
+            "durable_mvp/server.mjs",
+            "export {x} from './travel_agent/y.mjs';\n",
+        )
+        problems = self._problems()
+        self.assertTrue(any("travel_agent" in p for p in problems), problems)
+
+    # Reverse case (boundary officer): `export const travel_agent = 1` is a
+    # declaration, not an export-from; it must NOT be flagged.
+    def test_export_const_named_travel_agent_is_not_flagged(self):
+        self._write("README.md", "# fake\n")
+        self._write("durable_mvp/calendar.mjs", "export {}\n")
+        self._write(
+            "durable_mvp/server.mjs",
+            "export const travel_agent = 1;\nimport './calendar.mjs';\n",
+        )
+        self.assertEqual(self._problems(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

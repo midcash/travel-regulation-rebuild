@@ -69,25 +69,48 @@ def _readme_references(text):
             yield token
 
 
-def _import_specifiers(text):
-    """Yield the module specifier of each *static* import in `text`.
+def _strip_js_noise(text):
+    """Remove JS comments and template literals before scanning for imports.
 
-    Handles multi-line static imports:
+    Comments and template literals never carry a real static import declaration,
+    but they can contain text that looks like one. Removing them first keeps the
+    scan "miss-rather-than-false-positive". Single/double-quoted strings are left
+    in place: they only matter as the import specifier, which the import regex
+    consumes; a bare string like `const x = 'import ...'` has no line-leading
+    import/export prefix, so it is not matched anyway.
+    """
+    # Block comments /* ... */
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    # Line comments // ... to end of line
+    text = re.sub(r"//[^\n]*", "", text)
+    # Template literals `...` (may span lines)
+    text = re.sub(r"`[^`]*`", "", text, flags=re.S)
+    return text
+
+
+def _import_specifiers(text):
+    """Yield the module specifier of each *static* import or re-export in `text`.
+
+    Handles multi-line static imports / re-exports:
         import x from './a.mjs'
         import {
             a,
             b,
         } from '../travel_agent/x.mjs'
         import './side-effect.mjs'
-    Dynamic import() is a call expression, not a static declaration, so it is
-    intentionally NOT treated as an import constraint here.
+        export {x} from './travel_agent/y.mjs'
+    Comments and template literals are stripped first so text inside them is not
+    mistaken for executable imports. Dynamic import() is a call expression, not a
+    static declaration, so it is intentionally NOT treated as an import constraint.
     """
+    cleaned = _strip_js_noise(text)
     # Side-effect / bare: import '...'
-    for match in re.finditer(r"(?m)^\s*import\s+(['\"])([^'\"]+)\1", text):
+    for match in re.finditer(r"(?m)^\s*import\s+(['\"])([^'\"]+)\1", cleaned):
         yield match.group(2)
-    # import ... from '...'; the part between "import" and "from" may span lines
-    # and contain braces / identifiers, but no quotes (specifier is the quoted tail).
-    for match in re.finditer(r"(?ms)^\s*import\s+[^'\"]*?\bfrom\s+(['\"])([^'\"]+)\1", text):
+    # import/export ... from '...'; the part between the keyword and "from" may
+    # span lines and contain braces / identifiers, but no quotes (specifier is
+    # the quoted tail).
+    for match in re.finditer(r"(?ms)^\s*(?:import|export)\s+[^'\"]*?\bfrom\s+(['\"])([^'\"]+)\1", cleaned):
         yield match.group(2)
 
 
