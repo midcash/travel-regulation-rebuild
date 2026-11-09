@@ -52,7 +52,12 @@ def _readme_references(text):
     Sources: Markdown link targets ](target) and inline code spans `token`.
     Each token is stripped of anchors/queries and kept only if it falls under a
     known repo prefix, so command lines and anchors never cause false failures.
+
+    Fenced code blocks (``` ... ```) are removed first: unmatched backticks
+    inside a fence would otherwise desynchronise inline-code pairing and cause
+    real references after the fence to be silently skipped (missed detection).
     """
+    text = re.sub(r"```.*?```", "", text, flags=re.S)
     seen = []
     for match in re.finditer(r"\]\(([^)\s]+)\)", text):
         seen.append(match.group(1))
@@ -64,18 +69,42 @@ def _readme_references(text):
             yield token
 
 
-def _server_imports_travel_agent(text):
-    """Return offending import lines where server.mjs imports travel_agent.
+def _import_specifiers(text):
+    """Yield the module specifier of each *static* import in `text`.
 
-    Kept as a pure function over text so it can be exercised on sample strings
-    without touching the real file.
+    Handles multi-line static imports:
+        import x from './a.mjs'
+        import {
+            a,
+            b,
+        } from '../travel_agent/x.mjs'
+        import './side-effect.mjs'
+    Dynamic import() is a call expression, not a static declaration, so it is
+    intentionally NOT treated as an import constraint here.
     """
-    offenders = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("import") and "travel_agent" in stripped:
-            offenders.append(stripped)
-    return offenders
+    # Side-effect / bare: import '...'
+    for match in re.finditer(r"(?m)^\s*import\s+(['\"])([^'\"]+)\1", text):
+        yield match.group(2)
+    # import ... from '...'; the part between "import" and "from" may span lines
+    # and contain braces / identifiers, but no quotes (specifier is the quoted tail).
+    for match in re.finditer(r"(?ms)^\s*import\s+[^'\"]*?\bfrom\s+(['\"])([^'\"]+)\1", text):
+        yield match.group(2)
+
+
+def _specifier_is_travel_agent(specifier):
+    # A specifier points at travel_agent if it resolves to that package/dir:
+    # './travel_agent', '../travel_agent/leak.mjs', 'travel_agent', 'travel_agent.x'.
+    return re.match(r"^(?:\.{1,2}/)*travel_agent(?:\.|/|$)", specifier) is not None
+
+
+def _server_imports_travel_agent(text):
+    """Return offending import specifiers where server.mjs imports travel_agent.
+
+    Matches the import's module *specifier* (not any substring on the line), so
+    a line that merely mentions `travel_agent` in a comment/string is not a false
+    positive, and multi-line static imports are still caught.
+    """
+    return [spec for spec in _import_specifiers(text) if _specifier_is_travel_agent(spec)]
 
 
 def _find_problems(root):
