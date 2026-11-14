@@ -16,13 +16,20 @@ import {fauxProvider, fauxAssistantMessage, fauxToolCall} from '@earendil-works/
 import {Harness, createRegistry, defineDoc, defineEntry, defineExtension, defineTool, defineTask, section}
   from '@earendil-works/pi-durable';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {Calendar, DEFAULT_TIME_ZONE, calendarTools, inRange, nowInDefaultZone} from './calendar.mjs';
+import {Calendar, DEFAULT_TIME_ZONE, calendarTools, inRange, nowInDefaultZone, setNowProvider} from './calendar.mjs';
 
 const {values: options} = parseArgs({options: {
   mode: {type: 'string', default: 'offline'}, data: {type: 'string'},
-  port: {type: 'string', default: '8765'},
+  port: {type: 'string', default: '8765'}, 'now-file': {type: 'string'},
 }});
 if (!['offline', 'deepseek'].includes(options.mode)) throw new Error('mode must be offline or deepseek');
+// Test-only: pin "now" from a file (or literal ISO string). Production never passes this flag.
+if (options['now-file'] !== undefined) {
+  const source = fs.existsSync(options['now-file']) ? fs.readFileSync(options['now-file'], 'utf8').trim() : options['now-file'];
+  const fixed = Date.parse(source);
+  if (!Number.isFinite(fixed)) throw new Error('Invalid --now-file');
+  setNowProvider(() => fixed);
+}
 const port = Number(options.port);
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid port');
 const offline = options.mode === 'offline';
@@ -100,7 +107,7 @@ const extension = defineExtension({name: 'mvp', tasks: [Timer], tools: [tool, sl
   sections: [section('notebook', async (input, context) => {
     const note = await input.read.snapshot(Notebook, input.conversationId, context);
     return 'Current notebook: ' + JSON.stringify(note?.text ?? '');
-  }), section('calendar-clock', async () => `Current time (UTC+8): ${nowInDefaultZone()}. Default calendar timezone is fixed UTC+8 (${DEFAULT_TIME_ZONE}, offset +08:00), including relative dates and unqualified user times. Honor any user-specified timezone. Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
+  }), section('calendar-clock', async () => `Current time (UTC+8): ${nowInDefaultZone()}. Default calendar timezone is fixed UTC+8 (${DEFAULT_TIME_ZONE}, offset +08:00), including relative dates and unqualified user times. Honor any user-specified timezone. 涉及任何日期、相对时间（今天/明天/后天/本周X/几点）时，必须先调用 get_current_time 获取当前时间与今天/明天日期。创建或修改日程的日期请使用 when 参数（服务端会把它解析成绝对时刻），禁止自己把相对日期换算成绝对时间。禁止使用或相信历史消息中的任何时间戳或旧日期；以 get_current_time 与 when 解析结果为准。缺少具体时刻/日期且无法确定时，先追问用户，不要猜。Ask for timezone clarification only when its meaning is ambiguous. Ask for missing title, date, start/end time; do not assume duration. Overlaps require user confirmation through the page. Calendar tools support listing, creating, updating and deleting timed events. Before editing/deleting, query the relevant date range and use saved event IDs. If multiple events match the user description, ask which; never guess an ID. Preserve unspecified fields on update, including duration when shifting dates. Prefer updating dates over delete-then-create to avoid losing events if creation fails. For multi-event requests process each and report partial failures accurately. A clear change/delete instruction authorizes that action; hypothetical comparisons do not. Only report success from successful tool results.`)]});
 const models = createModels();
 let model;
 if (offline) {
@@ -112,6 +119,7 @@ if (offline) {
     if (result) return fauxAssistantMessage((result.isError ? '工具失败：' : '工具结果：') +
       result.content.filter(b => b.type === 'text').map(b => b.text).join('\n'));
     const [command, ...rest] = String(text).split(' ');
+    if (command === '/now') return fauxAssistantMessage(fauxToolCall('get_current_time', {}), {stopReason: 'toolUse'});
     if (['/calendar', '/events', '/update', '/delete'].includes(command)) {
       try { return fauxAssistantMessage(fauxToolCall(({'/calendar': 'create_calendar_event', '/events': 'list_calendar_events', '/update': 'update_calendar_event', '/delete': 'delete_calendar_event'})[command], JSON.parse(rest.join(' '))), {stopReason: 'toolUse'}); }
       catch { return fauxAssistantMessage('请提供有效 JSON 参数；离线模式不具备自然语言理解能力。'); }
