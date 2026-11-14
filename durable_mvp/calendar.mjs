@@ -39,10 +39,26 @@ export function inRange(events, start, end) {
   return events.filter(e => Date.parse(e.start) < b && Date.parse(e.end) > a);
 }
 const pad2 = value => String(value).padStart(2, '0');
-// All resolved instants use the project-wide fixed +08:00 offset and drop milliseconds so
-// they pass instant(); relative dates are computed from the UTC+8 wall clock, never UTC.
-const formatInstant = ms => nowInDefaultZone(ms).replace(/\.\d{3}\+08:00$/, '+08:00');
 const dateOf = ms => nowInDefaultZone(ms).slice(0, 10);
+function zonedClock(timeZone) {
+  const formatter = new Intl.DateTimeFormat('sv-SE', {timeZone, year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    timeZoneName: 'longOffset'});
+  const offsetOf = ms => formatter.formatToParts(ms).find(part => part.type === 'timeZoneName')
+    .value.slice(3).replace('−', '-') || '+00:00';
+  const format = ms => formatter.format(ms).slice(0, 19).replace(' ', 'T') + offsetOf(ms);
+  const resolve = wall => {
+    const utc = instant(wall + 'Z');
+    // Check offsets on either side of a possible clock change.
+    const day = 86400000;
+    const offsets = new Set([offsetOf(utc - day), offsetOf(utc + day)]);
+    const matches = [...offsets].map(offset => wall + offset)
+      .filter(value => format(instant(value)) === value);
+    if (matches.length !== 1) throw new Error('该本地时间不存在或有歧义，请提供明确的时区偏移');
+    return matches[0];
+  };
+  return {format, resolve};
+}
 // Real Date arithmetic handles month/year boundaries; no hand-written carry logic.
 function addDays(date, days) {
   const [year, month, day] = date.split('-').map(Number);
@@ -51,37 +67,36 @@ function addDays(date, days) {
 }
 const MAX_MINUTES = 525600; // one year, keeps arithmetic inside the representable range
 const DAY_OFFSETS = {today: 0, tomorrow: 1, dayAfterTomorrow: 2};
-// Turn the structured relative-time spec emitted by the model into absolute +08:00 instants.
-// The function is pure apart from the injected nowMs so it can be unit tested directly.
 export function resolveWhen(spec, nowMs = Date.now(), timeZone = DEFAULT_TIME_ZONE) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return {ok: false, reason: '时间参数无效'};
+  const wallFields = [spec.day, spec.date, spec.time].some(value => value !== undefined);
+  const forms = [wallFields, spec.offsetMinutes !== undefined, spec.absolute !== undefined];
+  if (forms.filter(Boolean).length > 1) return {ok: false, reason: '时间指定冲突'};
+  if (spec.day !== undefined && spec.date !== undefined) return {ok: false, reason: '日期指定冲突'};
   let durationMs;
   if (spec.durationMinutes !== undefined) {
     if (!Number.isInteger(spec.durationMinutes) || spec.durationMinutes <= 0 || spec.durationMinutes > MAX_MINUTES)
       return {ok: false, reason: 'durationMinutes 无效'};
     durationMs = spec.durationMinutes * 60000;
   }
+  const clock = zonedClock(timeZone);
   let start;
   if (spec.offsetMinutes !== undefined) {
     if (!Number.isInteger(spec.offsetMinutes) || Math.abs(spec.offsetMinutes) > MAX_MINUTES)
       return {ok: false, reason: 'offsetMinutes 无效'};
-    start = formatInstant(nowMs + spec.offsetMinutes * 60000);
+    start = clock.format(nowMs + spec.offsetMinutes * 60000);
   } else if (spec.absolute !== undefined) {
     try {
-      // A bare local datetime is interpreted in the project's fixed UTC+8 zone.
-      const value = typeof spec.absolute === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(spec.absolute)
-        ? spec.absolute + '+08:00' : spec.absolute;
-      start = formatInstant(instant(value));
-    } catch {
-      return {ok: false, reason: '时间格式无效'};
+      start = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(spec.absolute)
+        ? clock.resolve(spec.absolute) : clock.format(instant(spec.absolute));
+    } catch (error) {
+      return {ok: false, reason: error.message};
     }
   } else {
-    if (spec.day !== undefined && spec.date !== undefined) return {ok: false, reason: '日期指定冲突'};
     let date;
     if (spec.day !== undefined) {
-      const offset = DAY_OFFSETS[spec.day];
-      if (offset === undefined) return {ok: false, reason: '日期格式无效'};
-      date = addDays(dateOf(nowMs), offset);
+      if (!Object.hasOwn(DAY_OFFSETS, spec.day)) return {ok: false, reason: '日期格式无效'};
+      date = addDays(clock.format(nowMs).slice(0, 10), DAY_OFFSETS[spec.day]);
     } else if (spec.date !== undefined) {
       const parsed = typeof spec.date === 'string' ? Date.parse(spec.date) : NaN;
       if (!Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== spec.date)
@@ -93,13 +108,17 @@ export function resolveWhen(spec, nowMs = Date.now(), timeZone = DEFAULT_TIME_ZO
     if (spec.time === undefined) return {ok: false, missing: ['time'], reason: '请向用户追问具体时刻'};
     if (typeof spec.time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(spec.time))
       return {ok: false, reason: '时间格式无效'};
-    start = `${date}T${spec.time}:00+08:00`;
+    try {
+      start = clock.resolve(`${date}T${spec.time}:00`);
+    } catch (error) {
+      return {ok: false, reason: error.message};
+    }
   }
-  return durationMs === undefined ? {ok: true, start} : {ok: true, start, end: formatInstant(Date.parse(start) + durationMs)};
+  return durationMs === undefined ? {ok: true, start} : {ok: true, start, end: clock.format(instant(start) + durationMs)};
 }
 export function calendarTools(event) {
   const write = (updating = false) => defineTool({name: updating ? 'update_calendar_event' : 'create_calendar_event',
-    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events; omitted fields retain saved values. Never create a replacement event for an edit.' : 'Create ONE NEW event; never use this tool to edit a saved event or pass eventId.') + ` Provide title, start, end (explicit offsets) for creation; optional IANA timeZone defaults to ${DEFAULT_TIME_ZONE} (fixed UTC+8). Ask for missing creation fields. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence/reminders.`,
+    description: (updating ? 'Update ONE saved event by eventId from list_calendar_events. When moving it with when, preserve its duration unless a new end or duration is specified. Omitted fields retain saved values.' : 'Create ONE NEW event with a title and start/end timing. Use explicit offsets for start and end, or use when for the start and provide an end or durationMinutes inside when. Ask for missing creation fields.') + ` Call get_current_time before interpreting relative dates and pass a structured when for server-side resolution. Optional IANA timeZone defaults to the saved zone on update or ${DEFAULT_TIME_ZONE} (fixed UTC+8) on creation. On needs_confirmation use the page confirmation button. Only status created or updated means success. confirmationId retries a pending operation; only server-recorded user confirmation authorizes overlap. No recurrence/reminders.`,
     parameters: Type.Object({...(updating ? {eventId: Type.Optional(Type.String())} : {}), title: Type.Optional(Type.String({maxLength: 200})), start: Type.Optional(Type.String()),
       end: Type.Optional(Type.String()), timeZone: Type.Optional(Type.String()),
       when: Type.Optional(Type.Object({day: Type.Optional(Type.String()), date: Type.Optional(Type.String()),
@@ -109,18 +128,6 @@ export function calendarTools(event) {
     execute: async (input, api, context) => {
       event('tool');
       if (!updating && Object.hasOwn(input, 'eventId')) throw new Error('创建工具不接受 eventId；修改请使用 update_calendar_event');
-      if (input.when !== undefined) {
-        const resolved = resolveWhen(input.when, nowProvider(), DEFAULT_TIME_ZONE);
-        if (!resolved.ok) return output({status: 'needs_information', missing: resolved.missing ?? [],
-          reason: resolved.reason, spec: input.when});
-        if (input.start !== undefined && input.start !== resolved.start) {
-          const given = Date.parse(input.start), expected = Date.parse(resolved.start);
-          if (!(Number.isFinite(given) && given === expected))
-            return output({status: 'needs_information', missing: [], reason: 'start 与 when 冲突', spec: input.when});
-        }
-        input = {...input, start: resolved.start};
-        if (resolved.end !== undefined) input.end = resolved.end;
-      }
       return api.commit(async tx => {
         const doc = await tx.doc(Calendar, api.conversationId);
         if (Object.hasOwn(doc.operations, api.callId)) return output(doc.operations[api.callId]);
@@ -159,7 +166,21 @@ export function calendarTools(event) {
             return output(result);
           }
         } else {
-          input = {...original, ...input, timeZone: input.timeZone || original?.timeZone || DEFAULT_TIME_ZONE};
+          const timeZone = input.timeZone || original?.timeZone || DEFAULT_TIME_ZONE;
+          if (input.when !== undefined) {
+            const resolved = resolveWhen(input.when, nowProvider(), timeZone);
+            if (!resolved.ok) return output({status: 'needs_information', missing: resolved.missing ?? [],
+              reason: resolved.reason, spec: input.when});
+            if (input.start !== undefined && Date.parse(input.start) !== Date.parse(resolved.start))
+              return output({status: 'needs_information', missing: [], reason: 'start 与 when 冲突', spec: input.when});
+            let end = resolved.end ?? input.end;
+            if (end === undefined && original) {
+              const [oldStart, oldEnd] = range(original.start, original.end);
+              end = zonedClock(timeZone).format(instant(resolved.start) + oldEnd - oldStart);
+            }
+            input = {...input, start: resolved.start, end};
+          }
+          input = {...original, ...input, timeZone};
           const missing = ['title', 'start', 'end'].filter(key => !input[key]?.trim());
           if (missing.length) return output({status: 'needs_information', missing, message: '请向用户追问缺少的信息'});
           range(input.start, input.end);

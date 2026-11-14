@@ -27,7 +27,8 @@ if (!['offline', 'deepseek'].includes(options.mode)) throw new Error('mode must 
 if (options['now-file'] !== undefined) {
   const source = fs.existsSync(options['now-file']) ? fs.readFileSync(options['now-file'], 'utf8').trim() : options['now-file'];
   const fixed = Date.parse(source);
-  if (!Number.isFinite(fixed)) throw new Error('Invalid --now-file');
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(source) || !Number.isFinite(fixed))
+    throw new Error('Invalid --now-file: expected an ISO timestamp with Z or an explicit offset');
   setNowProvider(() => fixed);
 }
 const port = Number(options.port);

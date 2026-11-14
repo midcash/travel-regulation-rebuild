@@ -14,14 +14,17 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def offline_env():
+    return {key: value for key, value in os.environ.items() if key.upper() in {
+        'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'PATHEXT', 'COMSPEC'}}
+
+
 class Host:
     def __init__(self, folder, args=()):
         self.output = []
         ready = queue.Queue()
-        env = {k: v for k, v in os.environ.items() if k.upper() in {
-            'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'PATHEXT', 'COMSPEC'}}
         self.process = subprocess.Popen(['node', str(ROOT / 'durable_mvp/server.mjs'),
-            '--data', str(folder), '--port', '0', *args], cwd=ROOT, env=env,
+            '--data', str(folder), '--port', '0', *args], cwd=ROOT, env=offline_env(),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
 
         def read():
@@ -71,7 +74,8 @@ def node_now():
     """Ask a fresh Node process for nowInDefaultZone() so the clock is independently sourced."""
     script = "import {nowInDefaultZone} from './calendar.mjs'; console.log(nowInDefaultZone());"
     result = subprocess.run(['node', '--input-type=module', '-'], input=script,
-                            cwd=ROOT / 'durable_mvp', capture_output=True, text=True, encoding='utf-8')
+                            cwd=ROOT / 'durable_mvp', env=offline_env(), capture_output=True,
+                            text=True, encoding='utf-8')
     if result.returncode:
         raise AssertionError(result.stderr)
     return result.stdout.strip()
@@ -121,11 +125,15 @@ const results = {
   duration: resolveWhen({day: 'today', time: '20:10', durationMinutes: 90}, base),
   missingTime: resolveWhen({day: 'today'}, base),
   conflict: resolveWhen({day: 'today', date: '2026-11-09', time: '10:00'}, base),
+  mixedRelative: resolveWhen({offsetMinutes: 30, day: 'today', time: '10:00'}, base),
+  mixedAbsolute: resolveWhen({absolute: '2026-11-09T10:00:00+08:00', offsetMinutes: 30}, base),
+  unknownDay: resolveWhen({day: 'constructor', time: '10:00'}, base),
 };
 console.log(JSON.stringify(results));
 """
         result = subprocess.run(['node', '--input-type=module', '-'], input=script,
-                                cwd=ROOT / 'durable_mvp', capture_output=True, text=True, encoding='utf-8')
+                                cwd=ROOT / 'durable_mvp', env=offline_env(), capture_output=True,
+                                text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = json.loads(result.stdout)
         self.assertEqual(rows['today'], {'ok': True, 'start': '2026-11-09T20:10:00+08:00'})
@@ -140,6 +148,9 @@ console.log(JSON.stringify(results));
         self.assertFalse(rows['missingTime']['ok'])
         self.assertIn('time', rows['missingTime']['missing'])
         self.assertFalse(rows['conflict']['ok'])
+        self.assertFalse(rows['mixedRelative']['ok'])
+        self.assertFalse(rows['mixedAbsolute']['ok'])
+        self.assertFalse(rows['unknownDay']['ok'])
 
     def test_create_when_missing_time_needs_information(self):
         payload = {'title': '相对日程', 'when': {'day': 'today'}}
@@ -157,8 +168,20 @@ console.log(JSON.stringify(results));
         clock = [line for line in text.splitlines() if 'calendar-clock' in line]
         self.assertEqual(len(clock), 1)
         section = clock[0]
-        for token in ['get_current_time', '禁止', 'when', '今天/明天/后天', '追问']:
-            self.assertIn(token, section)
+        for instruction in [
+            '必须先调用 get_current_time',
+            '创建或修改日程的日期请使用 when 参数',
+            '禁止自己把相对日期换算成绝对时间',
+            '缺少具体时刻/日期且无法确定时，先追问用户',
+        ]:
+            self.assertIn(instruction, section)
+
+    def test_now_file_rejects_timestamp_without_offset(self):
+        clock_file = Path(self.temp.name, 'now-without-offset.txt')
+        clock_file.write_text('2026-11-09T12:34:56', encoding='utf-8')
+        with self.assertRaisesRegex(AssertionError, 'Invalid --now-file'):
+            host = Host(self.temp.name, args=['--now-file', str(clock_file)])
+            host.kill()
 
     def test_now_file_clock_consistency(self):
         fixed = '2026-11-09T12:34:56+08:00'
@@ -196,6 +219,29 @@ console.log(JSON.stringify(results));
         self.assertEqual(result['event']['start'][:10], now_result['tomorrow'])
         self.assertEqual(result['event']['start'][:10],
                          (date.fromisoformat(now_result['today']) + timedelta(days=1)).isoformat())
+
+    def test_when_create_and_move_use_event_zone_and_preserve_duration(self):
+        # Tokyo has already crossed midnight while the default zone is still on Nov 9.
+        self.host.kill()
+        self.host = Host(self.temp.name, args=['--now-file', '2026-11-09T23:30:00+08:00'])
+        payload = {'title': '东京日程', 'timeZone': 'Asia/Tokyo',
+                   'when': {'day': 'today', 'time': '14:00', 'durationMinutes': 60}}
+        self.host.prompt('/calendar ' + json.dumps(payload, ensure_ascii=False), 'tokyo-create')
+        result = tool_result(self.host.wait())
+        self.assertEqual(result['status'], 'created', result)
+        original = result['event']
+        self.assertEqual(original['start'], '2026-11-10T14:00:00+09:00')
+        self.assertEqual(original['end'], '2026-11-10T15:00:00+09:00')
+
+        payload = {'eventId': original['id'], 'when': {'day': 'tomorrow', 'time': '14:00'}}
+        self.host.prompt('/update ' + json.dumps(payload), 'tokyo-move')
+        state = self.host.wait()
+        result = tool_result(state)
+        self.assertEqual(result['status'], 'updated', result)
+        expected = {**original, 'start': '2026-11-11T14:00:00+09:00',
+                    'end': '2026-11-11T15:00:00+09:00'}
+        self.assertEqual(result['event'], expected)
+        self.assertEqual(state['calendar']['events'], [expected])
 
 
 if __name__ == '__main__':
