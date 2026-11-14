@@ -76,10 +76,10 @@ export function createAgentExtension(event: (kind: 'tool') => void) {
         `Current time (UTC+8): ${nowInDefaultZone()}. ` +
         `Default calendar timezone is fixed UTC+8 (${DEFAULT_TIME_ZONE}, offset +08:00), including relative dates and unqualified user times. ` +
         'Honor any user-specified timezone. ' +
-        '涉及任何日期、相对时间（今天/明天/后天/本周X/几点）时，必须先调用 get_current_time 获取当前时间与今天/明天日期。' +
+        '涉及任何日期、相对时间（今天/明天/后天/几点）时，必须先调用 get_current_time 获取当前时间与今天/明天日期。' +
         '创建或修改日程的日期请使用 when 参数（服务端会把它解析成绝对时刻），禁止自己把相对日期换算成绝对时间。' +
         '禁止使用或相信历史消息中的任何时间戳或旧日期；以 get_current_time 与 when 解析结果为准。' +
-        '缺少具体时刻/日期且无法确定时，先追问用户，不要猜。' +
+        '遇到 when 无法表达的日期（例如本周几），请用户提供具体日期。缺少具体时刻/日期且无法确定时，先追问用户，不要猜。' +
         'Ask for timezone clarification only when its meaning is ambiguous. ' +
         'Ask for missing title, date, start/end time; do not assume duration. ' +
         'Overlaps require user confirmation through the page. ' +

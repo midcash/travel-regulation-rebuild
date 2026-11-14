@@ -28,14 +28,13 @@ export function range(start: unknown, end: unknown): [number, number] {
   if (b <= a) throw new Error('结束时间必须晚于开始时间');
   return [a, b];
 }
-const pad2 = (value: number) => String(value).padStart(2, '0');
 export function zonedClock(timeZone: string) {
   const formatter = new Intl.DateTimeFormat('sv-SE', {timeZone, year: 'numeric', month: '2-digit',
     day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
     timeZoneName: 'longOffset'});
   const offsetOf = (ms: number) => formatter.formatToParts(ms).find(part => part.type === 'timeZoneName')
     ?.value.slice(3).replace('−', '-') || '+00:00';
-  const format = (ms: number) => formatter.format(ms).slice(0, 19).replace(' ', 'T') + offsetOf(ms);
+  const format = (ms: number) => formatter.format(ms).replace(/^\d+(?=-)/, year => year.padStart(4, '0')).slice(0, 19).replace(' ', 'T') + offsetOf(ms);
   const resolve = (wall: string) => {
     const utc = instant(wall + 'Z');
     // Check offsets on either side of a possible clock change.
@@ -51,8 +50,9 @@ export function zonedClock(timeZone: string) {
 // Real Date arithmetic handles month/year boundaries; no hand-written carry logic.
 export function addDays(date: string, days: number) {
   const [year, month, day] = date.split('-').map(Number);
-  const target = new Date(Date.UTC(year, month - 1, day + days));
-  return `${target.getUTCFullYear()}-${pad2(target.getUTCMonth() + 1)}-${pad2(target.getUTCDate())}`;
+  const target = new Date(0);
+  target.setUTCFullYear(year, month - 1, day + days);
+  return target.toISOString().split('T', 1)[0];
 }
 const MAX_MINUTES = 525600; // one year, keeps arithmetic inside the representable range
 const DAY_OFFSETS: Record<string, number> = {today: 0, tomorrow: 1, dayAfterTomorrow: 2};

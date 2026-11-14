@@ -51,7 +51,7 @@ export function createHttpServer(harness: Harness, root: Conversation, metadata:
     if (!address || typeof address === 'string') return reply(res, 503, {error: 'Host is not listening'});
     const origin = `http://127.0.0.1:${address.port}`;
     if (req.headers.host !== origin.slice(7) || (req.headers.origin && req.headers.origin !== origin))
-      return reply(res, 403, {error: 'Only same-origin loopback requests are allowed'});
+      return reply(res, 403, {error: 'Only same-origin loopback requests are allowed'}, {Connection: 'close'});
     const url = req.url ?? '';
     try {
       if (req.method === 'GET' && url === '/') {

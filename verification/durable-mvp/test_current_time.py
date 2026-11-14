@@ -122,6 +122,7 @@ const results = {
   absolute: resolveWhen({absolute: '2026-11-09T20:10:00+09:00'}, base),
   crossMonth: resolveWhen({day: 'tomorrow', time: '09:00'}, at('2026-01-31T23:00:00+08:00')),
   crossYear: resolveWhen({day: 'dayAfterTomorrow', time: '08:00'}, at('2026-12-31T23:30:00+08:00')),
+  earlyYear: resolveWhen({day: 'tomorrow', time: '09:00'}, at('0099-12-31T08:00:00+08:00')),
   duration: resolveWhen({day: 'today', time: '20:10', durationMinutes: 90}, base),
   missingTime: resolveWhen({day: 'today'}, base),
   conflict: resolveWhen({day: 'today', date: '2026-11-09', time: '10:00'}, base),
@@ -136,6 +137,7 @@ console.log(JSON.stringify(results));
                                 text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = json.loads(result.stdout)
+        self.assertEqual(rows['earlyYear'], {'ok': True, 'start': '0100-01-01T09:00:00+08:00'})
         self.assertEqual(rows['today'], {'ok': True, 'start': '2026-11-09T20:10:00+08:00'})
         self.assertEqual(rows['tomorrow'], {'ok': True, 'start': '2026-11-10T08:00:00+08:00'})
         self.assertEqual(rows['dayAfterTomorrow'], {'ok': True, 'start': '2026-11-11T09:30:00+08:00'})
@@ -164,17 +166,22 @@ console.log(JSON.stringify(results));
         self.assertEqual(state['calendar']['pending'], {})
 
     def test_prompt_requires_tool(self):
-        text = (ROOT / 'durable_mvp/agent.ts').read_text(encoding='utf-8')
-        marker = "section('calendar-clock'"
-        self.assertEqual(text.count(marker), 1)
-        section = text.split(marker, 1)[1]
+        script = """
+import {createAgentExtension} from './agent.ts';
+const section = createAgentExtension(() => {}).sections.find(section => section.key === 'calendar-clock');
+console.log(await section.render());
+"""
+        result = subprocess.run(['node', '--input-type=module', '-'], input=script,
+                                cwd=ROOT / 'durable_mvp', env=offline_env(), capture_output=True,
+                                text=True, encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stderr)
         for instruction in [
             '必须先调用 get_current_time',
             '创建或修改日程的日期请使用 when 参数',
             '禁止自己把相对日期换算成绝对时间',
             '缺少具体时刻/日期且无法确定时，先追问用户',
         ]:
-            self.assertIn(instruction, section)
+            self.assertIn(instruction, result.stdout)
 
     def test_now_file_rejects_timestamp_without_offset(self):
         clock_file = Path(self.temp.name, 'now-without-offset.txt')

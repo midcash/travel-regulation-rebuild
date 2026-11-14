@@ -82,11 +82,12 @@ class MVPTests(unittest.TestCase):
         self.host.kill()
         self.host = Host(self.temp.name)
 
-    def raw_post(self, content_type, body):
+    def raw_post(self, content_type, body, origin=None):
         host, port = self.host.url.removeprefix('http://').rsplit(':', 1)
+        origin_header = f'Origin: {origin}\r\n' if origin else ''
         head = (f'POST /prompt HTTP/1.1\r\nHost: {host}:{port}\r\n'
                 f'Content-Type: {content_type}\r\nContent-Length: {len(body)}\r\n'
-                'Connection: keep-alive\r\n\r\n').encode()
+                f'{origin_header}Connection: keep-alive\r\n\r\n').encode()
         # read until EOF, so a host that leaves the socket open fails on the timeout
         with socket.create_connection((host, int(port)), timeout=10) as raw:
             raw.sendall(head + body)
@@ -410,6 +411,13 @@ console.log(JSON.stringify(samples.map(value => {
         body = json.dumps({'text': 'x' * 20000, 'requestId': 'wrong-type-1'}).encode()
         response = self.raw_post('text/plain', body)
         self.assertTrue(response.startswith('HTTP/1.1 415'), response[:100])
+        self.assertIn('Connection: close', response)
+        self.assertEqual(self.host.call('/state')['messages'], [])
+
+    def test_foreign_origin_closes_unread_post(self):
+        body = b'{"text":"blocked","requestId":"foreign-origin"}'
+        response = self.raw_post('application/json', body, origin='http://example.invalid')
+        self.assertTrue(response.startswith('HTTP/1.1 403'), response[:100])
         self.assertIn('Connection: close', response)
         self.assertEqual(self.host.call('/state')['messages'], [])
 
