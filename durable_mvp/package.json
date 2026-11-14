@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "build": "tsc -p tsconfig.web.json",
+    "check": "tsc -p tsconfig.json && npm run build",
+    "start": "node server.ts"
   },
   "engines": {
     "node": ">=22.19.0"
@@ -15,5 +17,9 @@
     "@fullcalendar/luxon3": "6.1.20",
     "fullcalendar": "6.1.20",
     "luxon": "3.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
   }
 }

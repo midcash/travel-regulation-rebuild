@@ -23,7 +23,7 @@ class Host:
     def __init__(self, folder, args=()):
         self.output = []
         ready = queue.Queue()
-        self.process = subprocess.Popen(['node', str(ROOT / 'durable_mvp/server.mjs'),
+        self.process = subprocess.Popen(['node', str(ROOT / 'durable_mvp/server.ts'),
             '--data', str(folder), '--port', '0', *args], cwd=ROOT, env=offline_env(),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
 
@@ -72,7 +72,7 @@ class Host:
 
 def node_now():
     """Ask a fresh Node process for nowInDefaultZone() so the clock is independently sourced."""
-    script = "import {nowInDefaultZone} from './calendar.mjs'; console.log(nowInDefaultZone());"
+    script = "import {nowInDefaultZone} from './calendar-time.ts'; console.log(nowInDefaultZone());"
     result = subprocess.run(['node', '--input-type=module', '-'], input=script,
                             cwd=ROOT / 'durable_mvp', env=offline_env(), capture_output=True,
                             text=True, encoding='utf-8')
@@ -111,7 +111,7 @@ class CurrentTimeTests(unittest.TestCase):
 
     def test_resolve_when_pure(self):
         script = """
-import {resolveWhen} from './calendar.mjs';
+import {resolveWhen} from './calendar-time.ts';
 const at = value => Date.parse(value);
 const base = at('2026-11-09T10:00:00+08:00');
 const results = {
@@ -164,10 +164,10 @@ console.log(JSON.stringify(results));
         self.assertEqual(state['calendar']['pending'], {})
 
     def test_prompt_requires_tool(self):
-        text = (ROOT / 'durable_mvp/server.mjs').read_text(encoding='utf-8')
-        clock = [line for line in text.splitlines() if 'calendar-clock' in line]
-        self.assertEqual(len(clock), 1)
-        section = clock[0]
+        text = (ROOT / 'durable_mvp/agent.ts').read_text(encoding='utf-8')
+        marker = "section('calendar-clock'"
+        self.assertEqual(text.count(marker), 1)
+        section = text.split(marker, 1)[1]
         for instruction in [
             '必须先调用 get_current_time',
             '创建或修改日程的日期请使用 when 参数',

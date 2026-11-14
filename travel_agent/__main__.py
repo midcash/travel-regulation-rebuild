@@ -21,5 +21,5 @@ def wants_env(argv):
 if __name__ == "__main__":
     if wants_env(sys.argv[1:]):
         load_env()
-    script = Path(__file__).resolve().parents[1] / "durable_mvp" / "server.mjs"
+    script = Path(__file__).resolve().parents[1] / "durable_mvp" / "server.ts"
     raise SystemExit(subprocess.call(["node", str(script), *sys.argv[1:]], env=os.environ))

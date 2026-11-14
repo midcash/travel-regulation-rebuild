@@ -22,7 +22,7 @@ class Host:
         ready = queue.Queue()
         env = {k: v for k, v in os.environ.items() if k.upper() in {
             'PATH', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'PATHEXT', 'COMSPEC'}}
-        self.process = subprocess.Popen(['node', str(ROOT / 'durable_mvp/server.mjs'),
+        self.process = subprocess.Popen(['node', str(ROOT / 'durable_mvp/server.ts'),
             '--data', str(folder), '--port', '0'], cwd=ROOT, env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8')
 
@@ -164,7 +164,7 @@ class MVPTests(unittest.TestCase):
         # 16:00-24:00 UTC is already the next calendar day in UTC+8, so a UTC prompt clock would
         # tell the model the wrong date for "today" and "tomorrow".
         script = """
-import {nowInDefaultZone, DEFAULT_TIME_ZONE} from './calendar.mjs';
+import {nowInDefaultZone, DEFAULT_TIME_ZONE} from './calendar-time.ts';
 const wallClock = ms => new Intl.DateTimeFormat('sv-SE', {timeZone: DEFAULT_TIME_ZONE, hourCycle: 'h23',
   year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'})
   .format(ms).replace(' ', 'T');
@@ -184,7 +184,7 @@ console.log(JSON.stringify(samples.map(value => {
         # hard-coded +08:00 offset and the zone constant.
         self.assertEqual([(row['sameInstant'], row['wallClockMatches']) for row in rows],
                          [(True, True)] * len(rows))
-        clock = [line for line in (ROOT / 'durable_mvp/server.mjs').read_text(encoding='utf-8').splitlines()
+        clock = [line for line in (ROOT / 'durable_mvp/agent.ts').read_text(encoding='utf-8').splitlines()
                  if 'Current time' in line]
         self.assertEqual(len(clock), 1)
         self.assertIn('nowInDefaultZone()', clock[0])
