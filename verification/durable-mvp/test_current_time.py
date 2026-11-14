@@ -122,6 +122,8 @@ const results = {
   absolute: resolveWhen({absolute: '2026-11-09T20:10:00+09:00'}, base),
   crossMonth: resolveWhen({day: 'tomorrow', time: '09:00'}, at('2026-01-31T23:00:00+08:00')),
   crossYear: resolveWhen({day: 'dayAfterTomorrow', time: '08:00'}, at('2026-12-31T23:30:00+08:00')),
+  yearZero: resolveWhen({day: 'today', time: '09:00'}, at('0000-12-31T08:00:00+08:00')),
+  crossEra: resolveWhen({day: 'tomorrow', time: '09:00'}, at('0000-12-31T08:00:00+08:00')),
   earlyYear: resolveWhen({day: 'tomorrow', time: '09:00'}, at('0099-12-31T08:00:00+08:00')),
   duration: resolveWhen({day: 'today', time: '20:10', durationMinutes: 90}, base),
   missingTime: resolveWhen({day: 'today'}, base),
@@ -137,6 +139,8 @@ console.log(JSON.stringify(results));
                                 text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = json.loads(result.stdout)
+        self.assertEqual(rows['yearZero'], {'ok': True, 'start': '0000-12-31T09:00:00+08:00'})
+        self.assertEqual(rows['crossEra'], {'ok': True, 'start': '0001-01-01T09:00:00+08:00'})
         self.assertEqual(rows['earlyYear'], {'ok': True, 'start': '0100-01-01T09:00:00+08:00'})
         self.assertEqual(rows['today'], {'ok': True, 'start': '2026-11-09T20:10:00+08:00'})
         self.assertEqual(rows['tomorrow'], {'ok': True, 'start': '2026-11-10T08:00:00+08:00'})

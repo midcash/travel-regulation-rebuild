@@ -29,12 +29,20 @@ export function range(start: unknown, end: unknown): [number, number] {
   return [a, b];
 }
 export function zonedClock(timeZone: string) {
-  const formatter = new Intl.DateTimeFormat('sv-SE', {timeZone, year: 'numeric', month: '2-digit',
-    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-    timeZoneName: 'longOffset'});
-  const offsetOf = (ms: number) => formatter.formatToParts(ms).find(part => part.type === 'timeZoneName')
-    ?.value.slice(3).replace('−', '-') || '+00:00';
-  const format = (ms: number) => formatter.format(ms).replace(/^\d+(?=-)/, year => year.padStart(4, '0')).slice(0, 19).replace(' ', 'T') + offsetOf(ms);
+  const formatter = new Intl.DateTimeFormat('en-GB', {calendar: 'iso8601', timeZone,
+    year: 'numeric', era: 'short', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'longOffset'});
+  const offset = (label?: string) => label?.slice(3).replace('−', '-') || '+00:00';
+  const offsetOf = (ms: number) => offset(formatter.formatToParts(ms).find(part => part.type === 'timeZoneName')?.value);
+  const format = (ms: number) => {
+    const parts = Object.fromEntries(formatter.formatToParts(ms).map(({type, value}) => [type, value]));
+    // ISO 8601 year 0000 is 1 BC, while 0001 is 1 AD.
+    const year = parts.era === 'BC' ? 1 - Number(parts.year) : Number(parts.year);
+    const isoYear = year < 0 || year > 9999
+      ? (year < 0 ? '-' : '+') + String(Math.abs(year)).padStart(6, '0')
+      : String(year).padStart(4, '0');
+    return `${isoYear}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset(parts.timeZoneName)}`;
+  };
   const resolve = (wall: string) => {
     const utc = instant(wall + 'Z');
     // Check offsets on either side of a possible clock change.
