@@ -4,7 +4,7 @@ import {BACKGROUND_CONTEXT as ctx} from '@earendil-works/chord/context';
 import {Harness, createRegistry} from '@earendil-works/pi-durable';
 import {createModels} from '@earendil-works/pi-ai/models';
 import {openNodeSqliteStorage} from '@earendil-works/pi-durable/storage/sqlite/node';
-import {Calendar} from './calendar.mjs';
+import {Calendar} from './calendar.ts';
 const harness = await Harness.open(await openNodeSqliteStorage(path.join(process.argv[2], 'session.sqlite')),
   {models: createModels(), registry: createRegistry()}, ctx);
 try {

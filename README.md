@@ -16,6 +16,7 @@ Python 命令统一在仓库目录下的 `.venv` 中执行，不要用系统 Pyt
 python -m venv .venv   # 仅首次：用系统 Python 创建仓库虚拟环境
 .\.venv\Scripts\python.exe -m pip install -e .
 npm.cmd ci --prefix durable_mvp --ignore-scripts --no-audit --no-fund
+npm.cmd --prefix durable_mvp run build
 .\.venv\Scripts\python.exe -B -X utf8 -m travel_agent
 ```
 
@@ -58,12 +59,15 @@ npm.cmd ci --prefix durable_mvp --ignore-scripts --no-audit --no-fund
 
 ## 源码与能力边界
 
-- [durable_mvp/server.mjs](durable_mvp/server.mjs)：HTTP、pi-ai、Pi Durable Harness、SQLite、原生工具和任务。
-- [durable_mvp/calendar.mjs](durable_mvp/calendar.mjs)：日历文档、查询、新增、修改与删除工具、重叠候选和事务去重。
-- [页面](durable_mvp/index.html)、[交互](durable_mvp/app.js)、[样式](durable_mvp/style.css)：左中右三栏；输入框固定在对话区底部，日程与重叠确认在右侧可伸缩侧边栏，笔记、计时、命令说明和运行信息在 `#/notes` 视图。交互仍轮询保存的结果，并提交消息、取消和后台计时操作。
+- [宿主入口](durable_mvp/server.ts) 组装 Pi Durable、SQLite 和服务生命周期，[HTTP](durable_mvp/http.ts) 提供静态资源和应用接口。
+- [Agent](durable_mvp/agent.ts) 定义提示、工具和后台任务，[模型](durable_mvp/models.ts) 选择真实或离线模型，[文档](durable_mvp/documents.ts) 定义持久化记录。
+- [日历](durable_mvp/calendar.ts) 实现查询、变更、重叠确认和事务去重，[时间](durable_mvp/calendar-time.ts) 负责时区、时钟和相对日期解析。
+- [页面](durable_mvp/index.html)、[交互](durable_mvp/web/app.ts)、[样式](durable_mvp/style.css) 源码位于同一目录。Node 22 直接运行服务端 TypeScript，浏览器使用 npm 构建出的原生 ES 模块。修改浏览器代码后重新运行构建命令。
 - [启动入口](travel_agent/__main__.py)。
 - [本轮验收](verification/durable-mvp/README.md)：运行方式、断言和浏览器观察。
 - [底层 Durable 探针](verification/durable-step0/README.md)：原子性、存储失败和已提交状态等已有验证。
+
+模块划分参考 [OpenAI Agents SDK for TypeScript](https://github.com/openai/openai-agents-js/blob/main/CONTRIBUTING.md) 的运行时与模型适配边界，以及 [Mastra](https://github.com/mastra-ai/mastra/tree/main/packages/core/src) 的 Agent、工具与持久化职责划分。运行时仍由 Pi Durable 提供。
 
 Pi Durable、pi-ai 和 chord 精确锁定 1.4.0；Durable 是实验性 API。只支持单机、单用户、单会话、单进程，同一数据目录拒绝第二个宿主：宿主用独立 SQLite 锁库的独占事务声明占用，进程退出或被杀后由系统释放，不依赖 pid 文件，也不需要手工清理。MVP 上限为 200 个请求 ID、20 个后台计时。框架负责请求去重，应用持久化 ID 与正文绑定，拒绝同 ID 不同正文。浏览器对未确认提交保留原 ID，可以显式重试。
 

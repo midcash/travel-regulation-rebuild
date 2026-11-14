@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_PREFIXES = ("docs/", "durable_mvp/", "travel_agent/", "verification/")
 
 # Files that must exist because they are the single maintained Agent run path.
-REQUIRED_RUNTIME_FILES = ("durable_mvp/server.mjs", "durable_mvp/calendar.mjs")
+REQUIRED_RUNTIME_FILES = ("durable_mvp/server.ts", "durable_mvp/calendar.ts")
 
 
 def _fail(problems):
@@ -26,7 +26,7 @@ def _fail(problems):
 
 def _read_text(path):
     # utf-8-sig drops a leading BOM if present so a stray BOM cannot silently
-    # defeat line-prefix checks (e.g. startswith("import") in server.mjs).
+    # defeat line-prefix checks (e.g. startswith("import") in server.ts).
     return path.read_text(encoding="utf-8-sig")
 
 
@@ -121,7 +121,7 @@ def _specifier_is_travel_agent(specifier):
 
 
 def _server_imports_travel_agent(text):
-    """Return offending import specifiers where server.mjs imports travel_agent.
+    """Return offending import specifiers where server.ts imports travel_agent.
 
     Matches the import's module *specifier* (not any substring on the line), so
     a line that merely mentions `travel_agent` in a comment/string is not a false
@@ -153,12 +153,12 @@ def _find_problems(root):
             if not (root / token).exists():
                 problems.append(f"README references missing path: {token}")
 
-    # 3) travel_agent must stay frozen: server.mjs must not import it.
-    server = root / "durable_mvp/server.mjs"
+    # 3) travel_agent must stay frozen: server.ts must not import it.
+    server = root / "durable_mvp/server.ts"
     if server.is_file():
         for offender in _server_imports_travel_agent(_read_text(server)):
             problems.append(
-                "durable_mvp/server.mjs must not import travel_agent "
+                "durable_mvp/server.ts must not import travel_agent "
                 "(travel assets are frozen / not wired in): " + offender
             )
 
@@ -182,6 +182,7 @@ def main():
 
     env = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
     commands = [
+        ["npm.cmd" if os.name == "nt" else "npm", "--prefix", "durable_mvp", "run", "check"],
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "verification/durable-mvp", "-v"],
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "tests", "-v"],
         [sys.executable, "-B", "-X", "utf8", "-m", "unittest", "discover", "-s", "verification/durable-step0", "-v"],

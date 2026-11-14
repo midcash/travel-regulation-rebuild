@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [],
+    "rootDir": "web",
+    "outDir": "dist/web",
+    "noEmitOnError": true
+  },
+  "include": [
+    "web/**/*.ts"
+  ]
+}
